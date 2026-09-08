@@ -83,10 +83,10 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
         pageSize: args.pageSize as number | undefined,
       };
       logger.info('API call: computers.getCheckins', params);
-      const checkins = await client.computers.getCheckins(params.computerId, {
-        pageNumber: params.pageNumber,
-        pageSize: params.pageSize,
-      });
+      // getCheckins takes a single params object (computerId + pagination),
+      // not (computerId, paginationObject) — the previous two-argument call
+      // silently dropped computerId, causing the API to reject the request.
+      const checkins = await client.computers.getCheckins(params);
       return { content: [{ type: 'text', text: JSON.stringify(checkins, null, 2) }] };
     }
     default:

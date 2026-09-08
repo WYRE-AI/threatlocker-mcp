@@ -112,15 +112,15 @@ describe('threatlocker_audit_get', () => {
 });
 
 describe('threatlocker_audit_file_history', () => {
-  it('forwards the fullPath to fileHistory', async () => {
-    const fileHistory = vi.fn().mockResolvedValue({ events: [] });
-    mockClient({ fileHistory });
+  it('forwards the fullPath to getFileHistory (the method that actually exists on the SDK)', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue({ events: [] });
+    mockClient({ getFileHistory });
 
     const result = await auditLogHandler.handleCall('threatlocker_audit_file_history', {
       fullPath: 'C:\\Program Files\\App\\app.exe',
     });
 
-    expect(fileHistory).toHaveBeenCalledWith('C:\\Program Files\\App\\app.exe');
+    expect(getFileHistory).toHaveBeenCalledWith('C:\\Program Files\\App\\app.exe');
     expect(result.content[0].text).toBe(JSON.stringify({ events: [] }, null, 2));
   });
 });

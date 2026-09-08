@@ -79,16 +79,16 @@ describe('threatlocker_organizations_get_auth_key', () => {
 });
 
 describe('threatlocker_organizations_for_move_computers', () => {
-  it('calls forMoveComputers with no arguments and returns the raw response', async () => {
-    const forMoveComputers = vi.fn().mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
-    mockClient({ forMoveComputers });
+  it('calls listForMoveComputers (the method that actually exists on the SDK) with no arguments', async () => {
+    const listForMoveComputers = vi.fn().mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+    mockClient({ listForMoveComputers });
 
     const result = await organizationsHandler.handleCall(
       'threatlocker_organizations_for_move_computers',
       {},
     );
 
-    expect(forMoveComputers).toHaveBeenCalledWith();
+    expect(listForMoveComputers).toHaveBeenCalledWith();
     expect(result.content[0].text).toBe(
       JSON.stringify([{ id: 'org-1' }, { id: 'org-2' }], null, 2),
     );

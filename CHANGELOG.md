@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+### Fixed
+
+- `threatlocker_approvals_pending_count`, `threatlocker_audit_file_history`,
+  `threatlocker_organizations_for_move_computers`, and
+  `threatlocker_computer_groups_dropdown` called SDK methods that don't
+  exist (`approvalRequests.pendingCount`, `auditLog.fileHistory`,
+  `organizations.forMoveComputers`, `computerGroups.dropdown`), throwing
+  `... is not a function`. These tools were scaffolded against guessed
+  method names before `@wyre-technology/node-threatlocker` was published;
+  the real methods are `getPendingCount`, `getFileHistory`,
+  `listForMoveComputers`, and `getDropdown`. Fixed all four call sites.
+- `threatlocker_computers_get_checkins` called
+  `client.computers.getCheckins(computerId, { pageNumber, pageSize })` —
+  a two-argument call — but the SDK method takes a single params object.
+  `computerId` was silently dropped, and the API rejected the resulting
+  request as a 400 Bad Request. Fixed to pass one params object; requires
+  `@wyre-technology/node-threatlocker@^1.0.7` (or later), which also fixes
+  the SDK-side body-building bug that dropped `computerId` even when called
+  correctly — see that package's changelog.
+- `threatlocker_computer_groups_list` returning `[]` despite computers being
+  assigned to real groups, and `threatlocker_organizations_get_auth_key`
+  returning an empty key, were root-caused to `node-threatlocker` bugs (wrong
+  organization-scoping header name; a response-shape assumption that didn't
+  match the real bare-array API contract) — fixed there, no code change
+  needed in this repo beyond picking up the dependency bump.
+
 ### Added
 
 - Handler-invocation test coverage for all five tool domains

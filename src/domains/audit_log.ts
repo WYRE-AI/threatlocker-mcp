@@ -99,8 +99,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
     }
     case 'threatlocker_audit_file_history': {
       const fullPath = args.fullPath as string;
-      logger.info('API call: auditLog.fileHistory', { fullPath });
-      const history = await client.auditLog.fileHistory(fullPath);
+      logger.info('API call: auditLog.getFileHistory', { fullPath });
+      const history = await client.auditLog.getFileHistory(fullPath);
       return { content: [{ type: 'text', text: JSON.stringify(history, null, 2) }] };
     }
     default:
