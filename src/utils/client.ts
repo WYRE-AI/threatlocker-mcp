@@ -1,4 +1,4 @@
-import { ThreatLockerClient } from '@wyre-technology/node-threatlocker';
+import { ThreatLockerClient } from '@wyre-ai/node-threatlocker';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger } from './logger.js';
 import { detectInstance } from './instance-detect.js';

@@ -101,7 +101,7 @@ describe('threatlocker_computers_get', () => {
 });
 
 describe('threatlocker_computers_get_checkins', () => {
-  it('splits args into (computerId, {pageNumber, pageSize}) as a two-argument call', async () => {
+  it('calls getCheckins with a single params object (its real, single-argument signature)', async () => {
     const getCheckins = vi.fn().mockResolvedValue({ checkins: [] });
     mockClient({ getCheckins });
 
@@ -111,7 +111,11 @@ describe('threatlocker_computers_get_checkins', () => {
       pageSize: 5,
     });
 
-    expect(getCheckins).toHaveBeenCalledWith('c1', { pageNumber: 2, pageSize: 5 });
+    // The previous two-argument call, getCheckins(computerId, {pageNumber,
+    // pageSize}), silently dropped computerId — the SDK method only takes
+    // one params object, so computerId never reached the API and every
+    // checkin lookup 400'd as a bad request.
+    expect(getCheckins).toHaveBeenCalledWith({ computerId: 'c1', pageNumber: 2, pageSize: 5 });
   });
 
   it('returns the raw checkins response as JSON', async () => {

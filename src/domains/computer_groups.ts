@@ -43,8 +43,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'threatlocker_computer_groups_dropdown': {
-      logger.info('API call: computerGroups.dropdown');
-      const dropdown = await client.computerGroups.dropdown();
+      logger.info('API call: computerGroups.getDropdown');
+      const dropdown = await client.computerGroups.getDropdown();
       return { content: [{ type: 'text', text: JSON.stringify(dropdown, null, 2) }] };
     }
     default:

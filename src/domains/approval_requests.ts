@@ -87,8 +87,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(approval, null, 2) }] };
     }
     case 'threatlocker_approvals_pending_count': {
-      logger.info('API call: approvalRequests.pendingCount');
-      const count = await client.approvalRequests.pendingCount();
+      logger.info('API call: approvalRequests.getPendingCount');
+      const count = await client.approvalRequests.getPendingCount();
       return { content: [{ type: 'text', text: JSON.stringify(count, null, 2) }] };
     }
     case 'threatlocker_approvals_get_permit_application': {

@@ -56,8 +56,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(authKey, null, 2) }] };
     }
     case 'threatlocker_organizations_for_move_computers': {
-      logger.info('API call: organizations.forMoveComputers');
-      const organizations = await client.organizations.forMoveComputers();
+      logger.info('API call: organizations.listForMoveComputers');
+      const organizations = await client.organizations.listForMoveComputers();
       return { content: [{ type: 'text', text: JSON.stringify(organizations, null, 2) }] };
     }
     default:

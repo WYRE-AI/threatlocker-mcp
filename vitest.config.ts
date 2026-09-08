@@ -9,7 +9,7 @@ export default defineConfig({
     alias: {
       // The node-threatlocker package is installed but not built (dist/ is absent).
       // Point to the stub so tests can import client.ts without a resolution error.
-      '@wyre-technology/node-threatlocker': resolve(
+      '@wyre-ai/node-threatlocker': resolve(
         __dirname,
         'src/__tests__/__stubs__/node-threatlocker.ts',
       ),

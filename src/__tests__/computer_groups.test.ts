@@ -60,13 +60,13 @@ describe('threatlocker_computer_groups_list', () => {
 });
 
 describe('threatlocker_computer_groups_dropdown', () => {
-  it('calls dropdown with no arguments and returns the raw response', async () => {
-    const dropdown = vi.fn().mockResolvedValue([{ id: 'g1', name: 'All Computers' }]);
-    mockClient({ dropdown });
+  it('calls getDropdown (the method that actually exists on the SDK) with no arguments', async () => {
+    const getDropdown = vi.fn().mockResolvedValue([{ id: 'g1', name: 'All Computers' }]);
+    mockClient({ getDropdown });
 
     const result = await computerGroupsHandler.handleCall('threatlocker_computer_groups_dropdown', {});
 
-    expect(dropdown).toHaveBeenCalledWith();
+    expect(getDropdown).toHaveBeenCalledWith();
     expect(result.content[0].text).toBe(
       JSON.stringify([{ id: 'g1', name: 'All Computers' }], null, 2),
     );

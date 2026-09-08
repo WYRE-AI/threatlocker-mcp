@@ -89,13 +89,13 @@ describe('threatlocker_approvals_get', () => {
 });
 
 describe('threatlocker_approvals_pending_count', () => {
-  it('calls pendingCount with no arguments and returns the raw count', async () => {
-    const pendingCount = vi.fn().mockResolvedValue({ count: 7 });
-    mockClient({ pendingCount });
+  it('calls getPendingCount (the method that actually exists on the SDK) with no arguments', async () => {
+    const getPendingCount = vi.fn().mockResolvedValue({ count: 7 });
+    mockClient({ getPendingCount });
 
     const result = await approvalRequestsHandler.handleCall('threatlocker_approvals_pending_count', {});
 
-    expect(pendingCount).toHaveBeenCalledWith();
+    expect(getPendingCount).toHaveBeenCalledWith();
     expect(result.content[0].text).toBe(JSON.stringify({ count: 7 }, null, 2));
   });
 });

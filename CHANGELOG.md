@@ -1,5 +1,44 @@
 ## [Unreleased]
 
+### Fixed
+
+- `threatlocker_approvals_pending_count`, `threatlocker_audit_file_history`,
+  `threatlocker_organizations_for_move_computers`, and
+  `threatlocker_computer_groups_dropdown` called SDK methods that don't
+  exist (`approvalRequests.pendingCount`, `auditLog.fileHistory`,
+  `organizations.forMoveComputers`, `computerGroups.dropdown`), throwing
+  `... is not a function`. These tools were scaffolded against guessed
+  method names before `@wyre-ai/node-threatlocker` was published;
+  the real methods are `getPendingCount`, `getFileHistory`,
+  `listForMoveComputers`, and `getDropdown`. Fixed all four call sites.
+- `threatlocker_computers_get_checkins` called
+  `client.computers.getCheckins(computerId, { pageNumber, pageSize })` —
+  a two-argument call — but the SDK method takes a single params object.
+  `computerId` was silently dropped, and the API rejected the resulting
+  request as a 400 Bad Request. Fixed to pass one params object; requires
+  `@wyre-ai/node-threatlocker@^1.0.7` (or later), which also fixes
+  the SDK-side body-building bug that dropped `computerId` even when called
+  correctly — see that package's changelog.
+- `threatlocker_computer_groups_list` returning `[]` despite computers being
+  assigned to real groups, and `threatlocker_organizations_get_auth_key`
+  returning an empty key, were root-caused to `node-threatlocker` bugs (wrong
+  organization-scoping header name; a response-shape assumption that didn't
+  match the real bare-array API contract) — fixed there, no code change
+  needed in this repo beyond picking up the dependency bump.
+- **This repo silently stopped receiving any SDK updates since the
+  WYRE-AI org migration.** `node-threatlocker` renamed its published npm
+  package from `@wyre-technology/node-threatlocker` to
+  `@wyre-ai/node-threatlocker` at that migration (v1.0.6), but this repo's
+  `package.json`/`package-lock.json`/import in `src/utils/client.ts` were
+  never updated — `npm install` kept happily resolving the old scope's last
+  published version (1.0.5) forever, since GitHub Packages treats a scope
+  rename as a distinct package, not a redirect. No error, no warning: every
+  build since has been silently frozen on a two-week-stale SDK, missing
+  1.0.6 and this session's 1.0.7 org-scoping-header fix. Repointed to
+  `@wyre-ai/node-threatlocker@^1.0.7` (`package.json`, `vitest.config.ts`'s
+  test-stub alias, the stub file's own comment) and regenerated the lockfile
+  against the real published package.
+
 ### Added
 
 - Handler-invocation test coverage for all five tool domains
