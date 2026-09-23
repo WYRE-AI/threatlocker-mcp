@@ -2,6 +2,28 @@
 
 ### Fixed
 
+- `threatlocker_audit_file_history` sent only `fullPath` to
+  `auditLog.getFileHistory`. Portal
+  `GET /ActionLog/ActionLogGetAllForFileHistoryV2` returns HTTP 417
+  "Missing Parameters. Unable to load details." unless `fullPath` is
+  paired with `hostname` or `computerId` ([WYREAI-386](https://linear.app/wyre-ai/issue/WYREAI-386/epion-cw-automate-mcp-terminated-connection-interrupted-after-sep-9)).
+  The tool now requires one of those identifiers (both may be sent) and
+  calls `getFileHistory({ fullPath, hostname?, computerId?, sourceTableId?, pageNumber?, pageSize? })`.
+  A fullPath-only call is rejected in the handler and is not sent.
+  **SDK dependency is intentionally still `@wyre-ai/node-threatlocker@^1.0.7`.**
+  That is the latest GitHub Packages release; its `getFileHistory` still
+  takes a string and is the 417. The object form ships in
+  [node-threatlocker#32](https://github.com/WYRE-AI/node-threatlocker/pull/32)
+  (`fix!:`, draft, not published). semantic-release will publish that
+  commit as **2.0.0**, not a 1.x, and `^1.0.7` will not install it.
+  This repo's release practice is a caret range on the published
+  GitHub Packages tarball (`npm ci` in CI and `npm ci --ignore-scripts`
+  in the Docker image). A git pin of the unpublished branch is not used:
+  the SDK gitignores `dist/`, and the image build skips lifecycle
+  scripts, so a git install would ship without a build. Before this
+  change is released, bump the dependency to `^2.0.0` and regenerate
+  `package-lock.json` once 2.0.0 is on GitHub Packages. Do not release
+  this MCP against 1.0.7.
 - `threatlocker_approvals_pending_count`, `threatlocker_audit_file_history`,
   `threatlocker_organizations_for_move_computers`, and
   `threatlocker_computer_groups_dropdown` called SDK methods that don't

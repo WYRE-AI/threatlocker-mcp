@@ -112,16 +112,120 @@ describe('threatlocker_audit_get', () => {
 });
 
 describe('threatlocker_audit_file_history', () => {
-  it('forwards the fullPath to getFileHistory (the method that actually exists on the SDK)', async () => {
+  const tool = () =>
+    auditLogHandler.getTools().find((t) => t.name === 'threatlocker_audit_file_history');
+
+  it('requires fullPath plus hostname or computerId', () => {
+    const schema = tool()?.inputSchema as {
+      required?: string[];
+      anyOf?: Array<{ required: string[] }>;
+      properties?: Record<string, { description?: string }>;
+    };
+
+    expect(schema.required).toEqual(['fullPath']);
+    expect(schema.anyOf).toEqual([{ required: ['hostname'] }, { required: ['computerId'] }]);
+    expect(schema.properties?.hostname?.description).toMatch(/hostname/i);
+    expect(schema.properties?.computerId?.description).toMatch(/GUID/);
+    expect(schema.properties).toHaveProperty('sourceTableId');
+    expect(schema.properties).toHaveProperty('pageNumber');
+    expect(schema.properties).toHaveProperty('pageSize');
+  });
+
+  it('calls getFileHistory with { fullPath, hostname }', async () => {
     const getFileHistory = vi.fn().mockResolvedValue({ events: [] });
+    mockClient({ getFileHistory });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: '  C:\\Program Files\\App\\app.exe  ',
+      hostname: '  WORKSTATION-1  ',
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({
+      fullPath: 'C:\\Program Files\\App\\app.exe',
+      hostname: 'WORKSTATION-1',
+    });
+    expect(result.content[0].text).toBe(JSON.stringify({ events: [] }, null, 2));
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('calls getFileHistory with { fullPath, computerId } when hostname is omitted', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    mockClient({ getFileHistory });
+
+    await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\Windows\\System32\\cmd.exe',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({
+      fullPath: 'C:\\Windows\\System32\\cmd.exe',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+    });
+  });
+
+  it('forwards both identifiers and optional paging fields when set', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    mockClient({ getFileHistory });
+
+    await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\App\\app.exe',
+      hostname: 'HOST',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+      sourceTableId: 2,
+      pageNumber: 3,
+      pageSize: 25,
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({
+      fullPath: 'C:\\App\\app.exe',
+      hostname: 'HOST',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+      sourceTableId: 2,
+      pageNumber: 3,
+      pageSize: 25,
+    });
+  });
+
+  it('rejects fullPath alone and does not call getFileHistory', async () => {
+    const getFileHistory = vi.fn();
     mockClient({ getFileHistory });
 
     const result = await auditLogHandler.handleCall('threatlocker_audit_file_history', {
       fullPath: 'C:\\Program Files\\App\\app.exe',
     });
 
-    expect(getFileHistory).toHaveBeenCalledWith('C:\\Program Files\\App\\app.exe');
-    expect(result.content[0].text).toBe(JSON.stringify({ events: [] }, null, 2));
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/hostname or computerId/);
+    expect(getFileHistory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a blank hostname when computerId is missing', async () => {
+    const getFileHistory = vi.fn();
+    mockClient({ getFileHistory });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\App\\app.exe',
+      hostname: '   ',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(getFileHistory).not.toHaveBeenCalled();
+  });
+
+  it('drops a blank hostname and still sends computerId', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    mockClient({ getFileHistory });
+
+    await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\App\\app.exe',
+      hostname: '   ',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({
+      fullPath: 'C:\\App\\app.exe',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+    });
   });
 });
 
