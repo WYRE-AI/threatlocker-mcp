@@ -117,9 +117,9 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
     }
     case 'threatlocker_audit_file_history': {
-      // Object form from node-threatlocker#32 (WYREAI-386). The string
-      // call getFileHistory(fullPath) is the HTTP 417. Published SDK
-      // 1.0.7 still takes a string; this needs 2.0.0. See CHANGELOG.
+      // Object form from node-threatlocker#32 (WYREAI-386), published in
+      // @wyre-ai/node-threatlocker@2.0.0. The string call
+      // getFileHistory(fullPath) is the HTTP 417.
       const params = fileHistoryParams(args);
       if (!params) {
         return {

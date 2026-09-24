@@ -10,20 +10,11 @@
   The tool now requires one of those identifiers (both may be sent) and
   calls `getFileHistory({ fullPath, hostname?, computerId?, sourceTableId?, pageNumber?, pageSize? })`.
   A fullPath-only call is rejected in the handler and is not sent.
-  **SDK dependency is intentionally still `@wyre-ai/node-threatlocker@^1.0.7`.**
-  That is the latest GitHub Packages release; its `getFileHistory` still
-  takes a string and is the 417. The object form ships in
-  [node-threatlocker#32](https://github.com/WYRE-AI/node-threatlocker/pull/32)
-  (`fix!:`, draft, not published). semantic-release will publish that
-  commit as **2.0.0**, not a 1.x, and `^1.0.7` will not install it.
-  This repo's release practice is a caret range on the published
-  GitHub Packages tarball (`npm ci` in CI and `npm ci --ignore-scripts`
-  in the Docker image). A git pin of the unpublished branch is not used:
-  the SDK gitignores `dist/`, and the image build skips lifecycle
-  scripts, so a git install would ship without a build. Before this
-  change is released, bump the dependency to `^2.0.0` and regenerate
-  `package-lock.json` once 2.0.0 is on GitHub Packages. Do not release
-  this MCP against 1.0.7.
+  Depends on `@wyre-ai/node-threatlocker@^2.0.0`
+  ([node-threatlocker#32](https://github.com/WYRE-AI/node-threatlocker/pull/32),
+  published as 2.0.0 / `v2.0.0`). That release is a `fix!:`, so `^1.0.7`
+  does not install it. The string `getFileHistory(fullPath)` on 1.0.7
+  is the HTTP 417.
 - `threatlocker_approvals_pending_count`, `threatlocker_audit_file_history`,
   `threatlocker_organizations_for_move_computers`, and
   `threatlocker_computer_groups_dropdown` called SDK methods that don't
