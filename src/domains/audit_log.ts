@@ -34,13 +34,32 @@ function getTools(): Tool[] {
     },
     {
       name: 'threatlocker_audit_file_history',
-      description: 'Get audit history for a specific file path.',
+      description:
+        'Get audit history for a file on one computer. fullPath is required, plus hostname or computerId (a GUID). The Portal file-history API returns HTTP 417 when only fullPath is sent.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          fullPath: { type: 'string', description: 'Full file path' },
+          fullPath: { type: 'string', description: 'Full file path. Required.' },
+          hostname: {
+            type: 'string',
+            description: 'Computer hostname. Required unless computerId is set.',
+          },
+          computerId: {
+            type: 'string',
+            description: 'Computer GUID (not a numeric id). Required unless hostname is set.',
+          },
+          sourceTableId: {
+            type: 'number',
+            description:
+              'Optional source table. ActionLog = 1, DenyActionLog = 2, BaselineActionLog = 3, EventLogActionLog = 4.',
+          },
+          pageNumber: { type: 'number', description: 'Optional page number.' },
+          pageSize: { type: 'number', description: 'Optional page size.' },
         },
         required: ['fullPath'],
+        // `required` cannot express "hostname or computerId". anyOf requires
+        // at least one identifier; both may be sent together.
+        anyOf: [{ required: ['hostname'] }, { required: ['computerId'] }],
       },
     },
   ];
@@ -98,14 +117,53 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
     }
     case 'threatlocker_audit_file_history': {
-      const fullPath = args.fullPath as string;
-      logger.info('API call: auditLog.getFileHistory', { fullPath });
-      const history = await client.auditLog.getFileHistory(fullPath);
+      // Object form from node-threatlocker#32 (WYREAI-386), published in
+      // @wyre-ai/node-threatlocker@2.0.0. The string call
+      // getFileHistory(fullPath) is the HTTP 417.
+      const params = fileHistoryParams(args);
+      if (!params) {
+        return {
+          content: [{ type: 'text', text: FILE_HISTORY_ARG_ERROR }],
+          isError: true,
+        };
+      }
+      logger.info('API call: auditLog.getFileHistory', params);
+      const history = await client.auditLog.getFileHistory(params);
       return { content: [{ type: 'text', text: JSON.stringify(history, null, 2) }] };
     }
     default:
       return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
+}
+
+const FILE_HISTORY_ARG_ERROR =
+  'threatlocker_audit_file_history requires fullPath and either hostname or computerId. ' +
+  'ActionLogGetAllForFileHistoryV2 returns HTTP 417 "Missing Parameters. Unable to load details." ' +
+  'when only fullPath is sent.';
+
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * Builds the object `auditLog.getFileHistory` expects.
+ * Returns null when fullPath is blank or both computer identifiers are missing.
+ */
+function fileHistoryParams(args: Record<string, unknown>): Record<string, unknown> | null {
+  const fullPath = nonEmptyString(args.fullPath);
+  const hostname = nonEmptyString(args.hostname);
+  const computerId = nonEmptyString(args.computerId);
+  if (!fullPath || (!hostname && !computerId)) return null;
+
+  const params: Record<string, unknown> = { fullPath };
+  if (hostname) params.hostname = hostname;
+  if (computerId) params.computerId = computerId;
+  if (typeof args.sourceTableId === 'number') params.sourceTableId = args.sourceTableId;
+  if (typeof args.pageNumber === 'number') params.pageNumber = args.pageNumber;
+  if (typeof args.pageSize === 'number') params.pageSize = args.pageSize;
+  return params;
 }
 
 export const auditLogHandler: DomainHandler = { getTools, handleCall };

@@ -35,7 +35,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@wyre-ai/node-threatlocker": "^1.0.7"
+    "@wyre-ai/node-threatlocker": "^2.0.0"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^7.0.0",

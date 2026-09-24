@@ -2,6 +2,19 @@
 
 ### Fixed
 
+- `threatlocker_audit_file_history` sent only `fullPath` to
+  `auditLog.getFileHistory`. Portal
+  `GET /ActionLog/ActionLogGetAllForFileHistoryV2` returns HTTP 417
+  "Missing Parameters. Unable to load details." unless `fullPath` is
+  paired with `hostname` or `computerId` ([WYREAI-386](https://linear.app/wyre-ai/issue/WYREAI-386/epion-cw-automate-mcp-terminated-connection-interrupted-after-sep-9)).
+  The tool now requires one of those identifiers (both may be sent) and
+  calls `getFileHistory({ fullPath, hostname?, computerId?, sourceTableId?, pageNumber?, pageSize? })`.
+  A fullPath-only call is rejected in the handler and is not sent.
+  Depends on `@wyre-ai/node-threatlocker@^2.0.0`
+  ([node-threatlocker#32](https://github.com/WYRE-AI/node-threatlocker/pull/32),
+  published as 2.0.0 / `v2.0.0`). That release is a `fix!:`, so `^1.0.7`
+  does not install it. The string `getFileHistory(fullPath)` on 1.0.7
+  is the HTTP 417.
 - `threatlocker_approvals_pending_count`, `threatlocker_audit_file_history`,
   `threatlocker_organizations_for_move_computers`, and
   `threatlocker_computer_groups_dropdown` called SDK methods that don't
