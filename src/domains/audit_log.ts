@@ -26,7 +26,7 @@ function getTools(): Tool[] {
       description:
         'Get one audit log entry by eActionLogId, the string id on a threatlocker_audit_search row. ' +
         'Optional sourceTableId (integer 1-4) selects that row\'s source table. ' +
-        'actionLogId is a deprecated alias and is stringified into eActionLogId.',
+        'actionLogId is a deprecated alias and is stringified into eActionLogId. A numeric id is rejected before the request.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -46,7 +46,7 @@ function getTools(): Tool[] {
             type: 'string',
             deprecated: true,
             description:
-              'Deprecated alias for eActionLogId. Stringified and sent as eActionLogId. Prefer eActionLogId from the search row.',
+              'Deprecated alias for eActionLogId. Stringified and sent as eActionLogId when it is not numeric. A numeric actionLogId is rejected; use eActionLogId from the search row.',
           },
         },
         // One id is required. Existing callers send actionLogId; new callers send eActionLogId.
@@ -174,6 +174,14 @@ const AUDIT_GET_ARG_ERROR =
 const SOURCE_TABLE_ID_ERROR =
   'threatlocker_audit_get sourceTableId must be an integer 1 (ActionLog), 2 (DenyActionLog), 3 (BaselineActionLog), or 4 (EventLogActionLog).';
 
+const AUDIT_GET_NUMERIC_ID_ERROR =
+  'threatlocker_audit_get got a numeric action log id. actionLogId is a deprecated alias and is stringified, ' +
+  'but ActionLogGetByIdV2 does not accept the numeric actionLogId (that request is HTTP 500). ' +
+  'Pass eActionLogId, the string id on the threatlocker_audit_search row.';
+
+/** Digit-only ids are V1 actionLogId values. The SDK rejects them before the request. */
+const NUMERIC_ACTION_LOG_ID = /^-?\d+$/;
+
 type AuditGetSuccess = {
   ok: true;
   eActionLogId: string;
@@ -189,6 +197,7 @@ type AuditGetFailure = { ok: false; message: string };
 function auditGetArgs(args: Record<string, unknown>): AuditGetSuccess | AuditGetFailure {
   const eActionLogId = nonEmptyString(args.eActionLogId) ?? stringifiedId(args.actionLogId);
   if (!eActionLogId) return { ok: false, message: AUDIT_GET_ARG_ERROR };
+  if (NUMERIC_ACTION_LOG_ID.test(eActionLogId)) return { ok: false, message: AUDIT_GET_NUMERIC_ID_ERROR };
 
   if (args.sourceTableId == null) return { ok: true, eActionLogId };
   if (!isSourceTableId(args.sourceTableId)) return { ok: false, message: SOURCE_TABLE_ID_ERROR };

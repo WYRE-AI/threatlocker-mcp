@@ -10,6 +10,7 @@
   The tool now takes `eActionLogId` plus optional `sourceTableId` (integer 1-4)
   and calls `auditLog.get(eActionLogId, { sourceTableId })`. `actionLogId`
   remains a deprecated alias and is stringified into `eActionLogId`.
+  A digit-only id is rejected before the request, matching the SDK.
   Depends on `@wyre-ai/node-threatlocker@^3.0.0`
   ([node-threatlocker#35](https://github.com/WYRE-AI/node-threatlocker/pull/35),
   published as 3.0.0 / `v3.0.0`).

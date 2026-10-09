@@ -159,15 +159,30 @@ describe('threatlocker_audit_get', () => {
     expect(result.content[0].text).toBe(JSON.stringify({ eActionLogId: 'al-1' }, null, 2));
   });
 
-  it('stringifies a numeric actionLogId alias', async () => {
-    const get = vi.fn().mockResolvedValue({});
+  it('rejects a numeric actionLogId alias before calling get', async () => {
+    const get = vi.fn();
     mockClient({ get });
 
-    await auditLogHandler.handleCall('threatlocker_audit_get', {
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
       actionLogId: 48291,
     });
 
-    expect(get).toHaveBeenCalledWith('48291', { sourceTableId: undefined });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/eActionLogId/);
+    expect(result.content[0].text).toMatch(/numeric/);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('rejects a digit-only eActionLogId before calling get', async () => {
+    const get = vi.fn();
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: '  48291  ',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(get).not.toHaveBeenCalled();
   });
 
   it('prefers eActionLogId when both ids are sent', async () => {
