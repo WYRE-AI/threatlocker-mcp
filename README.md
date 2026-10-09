@@ -34,7 +34,7 @@ A Model Context Protocol (MCP) server that provides AI assistants with access to
 
 ### Audit Log
 - `threatlocker_audit_search` - Search audit log entries with filters
-- `threatlocker_audit_get` - Get detailed audit log entry
+- `threatlocker_audit_get` - Get one audit log entry by `eActionLogId` from a search row (deprecated alias: `actionLogId`)
 - `threatlocker_audit_file_history` - Get audit history for a file. Requires `fullPath` and either `hostname` or `computerId`
 
 ### Organizations

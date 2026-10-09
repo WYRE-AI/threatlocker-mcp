@@ -98,16 +98,114 @@ describe('threatlocker_audit_search', () => {
 });
 
 describe('threatlocker_audit_get', () => {
-  it('forwards the actionLogId and returns the mapped response', async () => {
-    const get = vi.fn().mockResolvedValue({ id: 'al-1' });
+  const tool = () => auditLogHandler.getTools().find((t) => t.name === 'threatlocker_audit_get');
+
+  it('describes eActionLogId as the search-row id and keeps actionLogId as a deprecated alias', () => {
+    const schema = tool()?.inputSchema as {
+      description?: string;
+      anyOf?: Array<{ required: string[] }>;
+      properties?: Record<string, { type?: string; description?: string; deprecated?: boolean; minimum?: number; maximum?: number }>;
+    };
+    const description = tool()?.description ?? '';
+
+    expect(description).toMatch(/eActionLogId/);
+    expect(description).toMatch(/threatlocker_audit_search/);
+    expect(schema.anyOf).toEqual([{ required: ['eActionLogId'] }, { required: ['actionLogId'] }]);
+    expect(schema.properties?.eActionLogId?.type).toBe('string');
+    expect(schema.properties?.eActionLogId?.description).toMatch(/threatlocker_audit_search/);
+    expect(schema.properties?.sourceTableId).toMatchObject({
+      type: 'integer',
+      minimum: 1,
+      maximum: 4,
+    });
+    expect(schema.properties?.actionLogId?.deprecated).toBe(true);
+    expect(schema.properties?.actionLogId?.description).toMatch(/deprecated alias/i);
+  });
+
+  it('passes eActionLogId and sourceTableId to auditLog.get', async () => {
+    const get = vi.fn().mockResolvedValue({ eActionLogId: 'opaque-id' });
     mockClient({ get });
 
     const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
-      actionLogId: 'al-1',
+      eActionLogId: '  opaque-id  ',
+      sourceTableId: 1,
     });
 
-    expect(get).toHaveBeenCalledWith('al-1');
-    expect(result.content[0].text).toBe(JSON.stringify({ id: 'al-1' }, null, 2));
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: 1 });
+    expect(result.content[0].text).toBe(JSON.stringify({ eActionLogId: 'opaque-id' }, null, 2));
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('omits sourceTableId when the caller does not set it', async () => {
+    const get = vi.fn().mockResolvedValue({ eActionLogId: 'opaque-id' });
+    mockClient({ get });
+
+    await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+    });
+
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: undefined });
+  });
+
+  it('stringifies the deprecated actionLogId alias when eActionLogId is absent', async () => {
+    const get = vi.fn().mockResolvedValue({ eActionLogId: 'al-1' });
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      actionLogId: '  al-1  ',
+    });
+
+    expect(get).toHaveBeenCalledWith('al-1', { sourceTableId: undefined });
+    expect(result.content[0].text).toBe(JSON.stringify({ eActionLogId: 'al-1' }, null, 2));
+  });
+
+  it('stringifies a numeric actionLogId alias', async () => {
+    const get = vi.fn().mockResolvedValue({});
+    mockClient({ get });
+
+    await auditLogHandler.handleCall('threatlocker_audit_get', {
+      actionLogId: 48291,
+    });
+
+    expect(get).toHaveBeenCalledWith('48291', { sourceTableId: undefined });
+  });
+
+  it('prefers eActionLogId when both ids are sent', async () => {
+    const get = vi.fn().mockResolvedValue({});
+    mockClient({ get });
+
+    await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      actionLogId: '48291',
+      sourceTableId: 4,
+    });
+
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: 4 });
+  });
+
+  it('rejects a call with neither id and does not call get', async () => {
+    const get = vi.fn();
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/eActionLogId/);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sourceTableId outside 1-4 and does not call get', async () => {
+    const get = vi.fn();
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      sourceTableId: 5,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/sourceTableId/);
+    expect(get).not.toHaveBeenCalled();
   });
 });
 

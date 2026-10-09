@@ -2,6 +2,17 @@
 
 ### Fixed
 
+- `threatlocker_audit_get` called `auditLog.get` with the V1 `actionLogId`.
+  Portal `GET /ActionLog/ActionLogGetByIdV2` binds `eActionLogId` (the string
+  on a `threatlocker_audit_search` row) and returns HTTP 500 for the numeric
+  id ([WYREAI-386](https://linear.app/wyre-ai/issue/WYREAI-386/epion-cw-automate-mcp-terminated-connection-interrupted-after-sep-9),
+  [threatlocker-mcp#63](https://github.com/WYRE-AI/threatlocker-mcp/issues/63)).
+  The tool now takes `eActionLogId` plus optional `sourceTableId` (integer 1-4)
+  and calls `auditLog.get(eActionLogId, { sourceTableId })`. `actionLogId`
+  remains a deprecated alias and is stringified into `eActionLogId`.
+  Depends on `@wyre-ai/node-threatlocker@^3.0.0`
+  ([node-threatlocker#35](https://github.com/WYRE-AI/node-threatlocker/pull/35),
+  published as 3.0.0 / `v3.0.0`).
 - `threatlocker_audit_file_history` sent only `fullPath` to
   `auditLog.getFileHistory`. Portal
   `GET /ActionLog/ActionLogGetAllForFileHistoryV2` returns HTTP 417

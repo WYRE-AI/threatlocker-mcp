@@ -23,13 +23,34 @@ function getTools(): Tool[] {
     },
     {
       name: 'threatlocker_audit_get',
-      description: 'Get a single audit log entry by ID.',
+      description:
+        'Get one audit log entry by eActionLogId, the string id on a threatlocker_audit_search row. ' +
+        'Optional sourceTableId (integer 1-4) selects that row\'s source table. ' +
+        'actionLogId is a deprecated alias and is stringified into eActionLogId.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          actionLogId: { type: 'string', description: 'Action log ID' },
+          eActionLogId: {
+            type: 'string',
+            description:
+              'eActionLogId from a threatlocker_audit_search row. ActionLogGetByIdV2 requires this string; the numeric actionLogId on the same row is a different field and returns HTTP 500.',
+          },
+          sourceTableId: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 4,
+            description:
+              'Optional source table of that row. ActionLog = 1, DenyActionLog = 2, BaselineActionLog = 3, EventLogActionLog = 4.',
+          },
+          actionLogId: {
+            type: 'string',
+            deprecated: true,
+            description:
+              'Deprecated alias for eActionLogId. Stringified and sent as eActionLogId. Prefer eActionLogId from the search row.',
+          },
         },
-        required: ['actionLogId'],
+        // One id is required. Existing callers send actionLogId; new callers send eActionLogId.
+        anyOf: [{ required: ['eActionLogId'] }, { required: ['actionLogId'] }],
       },
     },
     {
@@ -111,9 +132,18 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'threatlocker_audit_get': {
-      const actionLogId = args.actionLogId as string;
-      logger.info('API call: auditLog.get', { actionLogId });
-      const auditEntry = await client.auditLog.get(actionLogId);
+      // node-threatlocker@3.0.0 (WYREAI-386): get(id: string, { sourceTableId }?)
+      // sends eActionLogId. The numeric actionLogId is V1 and HTTP 500s on V2.
+      const resolved = auditGetArgs(args);
+      if (!resolved.ok) {
+        return {
+          content: [{ type: 'text', text: resolved.message }],
+          isError: true,
+        };
+      }
+      const { eActionLogId, sourceTableId } = resolved;
+      logger.info('API call: auditLog.get', { eActionLogId, sourceTableId });
+      const auditEntry = await client.auditLog.get(eActionLogId, { sourceTableId });
       return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
     }
     case 'threatlocker_audit_file_history': {
@@ -134,6 +164,44 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
     default:
       return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
+}
+
+const AUDIT_GET_ARG_ERROR =
+  'threatlocker_audit_get requires eActionLogId, the string id on a threatlocker_audit_search row. ' +
+  'actionLogId is accepted as a deprecated alias and is stringified into eActionLogId. ' +
+  'The numeric actionLogId is not that id; ActionLogGetByIdV2 returns HTTP 500 for it.';
+
+const SOURCE_TABLE_ID_ERROR =
+  'threatlocker_audit_get sourceTableId must be an integer 1 (ActionLog), 2 (DenyActionLog), 3 (BaselineActionLog), or 4 (EventLogActionLog).';
+
+type AuditGetSuccess = {
+  ok: true;
+  eActionLogId: string;
+  sourceTableId?: 1 | 2 | 3 | 4;
+};
+
+type AuditGetFailure = { ok: false; message: string };
+
+/**
+ * Prefers eActionLogId. actionLogId is the deprecated alias and is stringified
+ * (a numeric actionLogId becomes its decimal string) so older callers still reach get().
+ */
+function auditGetArgs(args: Record<string, unknown>): AuditGetSuccess | AuditGetFailure {
+  const eActionLogId = nonEmptyString(args.eActionLogId) ?? stringifiedId(args.actionLogId);
+  if (!eActionLogId) return { ok: false, message: AUDIT_GET_ARG_ERROR };
+
+  if (args.sourceTableId == null) return { ok: true, eActionLogId };
+  if (!isSourceTableId(args.sourceTableId)) return { ok: false, message: SOURCE_TABLE_ID_ERROR };
+  return { ok: true, eActionLogId, sourceTableId: args.sourceTableId };
+}
+
+function stringifiedId(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return nonEmptyString(value);
+}
+
+function isSourceTableId(value: unknown): value is 1 | 2 | 3 | 4 {
+  return value === 1 || value === 2 || value === 3 || value === 4;
 }
 
 const FILE_HISTORY_ARG_ERROR =
