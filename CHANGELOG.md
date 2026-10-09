@@ -2,6 +2,14 @@
 
 ### Fixed
 
+- HTTP transport failed open when `CONDUIT_S2S_SECRET` was unset (CWE-306).
+  `/mcp` skipped service-to-service verification, the default bind was
+  `0.0.0.0`, and `AUTH_MODE=gateway` fell back to process-environment
+  vendor credentials. The HTTP server now refuses to start without
+  `CONDUIT_S2S_SECRET` unless `MCP_ALLOW_INSECURE_DEV=1`, gateway requests
+  without vendor credential headers return 401 with no env fallback, and
+  the default bind host is `127.0.0.1`. `/health` stays unauthenticated
+  and does not read credentials. Stdio is unchanged.
 - `threatlocker_audit_get` called `auditLog.get` with the V1 `actionLogId`.
   Portal `GET /ActionLog/ActionLogGetByIdV2` binds `eActionLogId` (the string
   on a `threatlocker_audit_search` row) and returns HTTP 500 for the numeric

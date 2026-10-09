@@ -11,13 +11,15 @@ services:
       - MCP_TRANSPORT=http
       - MCP_HTTP_PORT=8080
       - AUTH_MODE=gateway
+      # Compose refuses to start when this is unset or empty.
+      - "CONDUIT_S2S_SECRET=${CONDUIT_S2S_SECRET:?set CONDUIT_S2S_SECRET}"
       # For stdio mode, uncomment these and set AUTH_MODE=env:
       # - THREATLOCKER_API_KEY=your_api_key_here
       # - THREATLOCKER_ORGANIZATION_ID=your_org_id_here
     expose:
       - "8080"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - threatlocker-mcp-logs:/app/logs
     healthcheck:
