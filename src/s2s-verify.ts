@@ -14,10 +14,10 @@
  * here. This function doesn't need to know that; it just checks whatever
  * secret it's handed.
  *
- * Empty secret => always returns false. The caller is expected to treat an
- * empty CONDUIT_S2S_SECRET as "S2S enforcement disabled" (dark-by-default,
- * matches the dormant/pre-provisioning state) rather than calling this at
- * all — see the enforcement check in http.ts.
+ * Empty secret => always returns false. The HTTP server refuses to start
+ * when CONDUIT_S2S_SECRET is empty (see src/http-server.ts). The only
+ * exception is MCP_ALLOW_INSECURE_DEV=1, which is local-development only:
+ * there is then no secret to verify, so the caller skips this check.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 

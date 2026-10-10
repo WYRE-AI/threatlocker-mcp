@@ -58,13 +58,23 @@ MCP_TRANSPORT=stdio
 AUTH_MODE=gateway
 MCP_TRANSPORT=http
 MCP_HTTP_PORT=8080
-MCP_HTTP_HOST=0.0.0.0
+# Required. The HTTP server exits non-zero if this is empty.
+CONDUIT_S2S_SECRET=gateway-provisioned-secret
+# Optional. Unset binds 127.0.0.1. The container image sets 0.0.0.0.
+# MCP_HTTP_HOST=127.0.0.1
 ```
+
+`CONDUIT_S2S_SECRET` is required for the HTTP transport. The process logs an error and exits non-zero when it is unset. For local development only, `MCP_ALLOW_INSECURE_DEV=1` starts the server anyway and logs a loud warning; do not set that flag in production. The secret is never written to the logs.
+
+When `MCP_HTTP_HOST` is unset, the server binds `127.0.0.1`. The Dockerfile sets `MCP_HTTP_HOST=0.0.0.0` so the process listens inside the container; publish that port on localhost.
 
 #### Gateway Mode Headers
 When running in gateway mode, include these headers with each request:
-- `X-Threatlocker-Api-Key`: Your ThreatLocker API key
-- `X-Threatlocker-Organization-Id`: Your organization ID
+- `X-Gateway-S2S`: Service-to-service proof from the gateway (`t=<unix>,v1=<hmac>`). Requests without a valid header are rejected with 401 when `CONDUIT_S2S_SECRET` is set.
+- `X-Threatlocker-Api-Key`: Your ThreatLocker API key (required). A request without it is rejected with 401 and does not fall back to `THREATLOCKER_API_KEY`.
+- `X-Threatlocker-Organization-Id`: Your organization ID (optional; the API defaults to the key's primary organization)
+
+`/health` and `/healthz` stay unauthenticated and do not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
 
 ### Logging
 ```bash
@@ -104,8 +114,11 @@ npm run dev
 # Stdio mode
 echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}' | npm start
 
-# HTTP mode
-curl http://localhost:8080/health
+# HTTP mode. CONDUIT_S2S_SECRET is required unless you set
+# MCP_ALLOW_INSECURE_DEV=1 (local development only; logs a loud warning).
+# The server binds 127.0.0.1 unless MCP_HTTP_HOST is set.
+MCP_TRANSPORT=http AUTH_MODE=gateway CONDUIT_S2S_SECRET=dev-secret npm run start:http
+curl http://127.0.0.1:8080/health
 ```
 
 ## Docker
@@ -113,7 +126,10 @@ curl http://localhost:8080/health
 ### Using Docker Compose
 
 ```bash
-# Pull and run latest image
+# Required. Compose will not start if this is unset or empty.
+export CONDUIT_S2S_SECRET=gateway-provisioned-secret
+
+# Pull and run latest image. The published port is 127.0.0.1:8080.
 docker compose up -d
 
 # Or build locally
@@ -123,11 +139,14 @@ docker compose -f docker-compose.dev.yml up --build
 ### Using Docker directly
 
 ```bash
-# Gateway mode (recommended)
+# Gateway mode (recommended). The container listens on 0.0.0.0 inside
+# the network namespace; publish it on localhost only. The process
+# exits if CONDUIT_S2S_SECRET is empty.
 docker run -d \
   --name threatlocker-mcp \
-  -p 8080:8080 \
+  -p 127.0.0.1:8080:8080 \
   -e AUTH_MODE=gateway \
+  -e CONDUIT_S2S_SECRET=gateway-provisioned-secret \
   ghcr.io/wyre-ai/threatlocker-mcp:latest
 
 # Stdio mode

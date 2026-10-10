@@ -61,6 +61,9 @@ ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 ENV MCP_TRANSPORT=http
 ENV MCP_HTTP_PORT=8080
+# All interfaces inside the container. Publish the host port on 127.0.0.1
+# (see docker-compose.yml). The process still refuses to start unless
+# CONDUIT_S2S_SECRET is set at runtime.
 ENV MCP_HTTP_HOST=0.0.0.0
 ENV AUTH_MODE=gateway
 
