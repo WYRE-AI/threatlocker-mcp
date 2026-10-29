@@ -19,7 +19,9 @@ function getTools(): Tool[] {
     },
     {
       name: 'threatlocker_organizations_get_auth_key',
-      description: 'Get the organization auth key.',
+      description:
+        'Get the installation auth key for the organization the configured credentials are scoped to. ' +
+        'The returned value is a sensitive installation key; do not log or share it.',
       inputSchema: {
         type: 'object' as const,
         properties: {},
@@ -51,8 +53,19 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'threatlocker_organizations_get_auth_key': {
+      // Never log the key itself. The org is determined solely by the request-scoped client
+      // (tenant credentials); tool args must never select it.
       logger.info('API call: organizations.getAuthKey');
-      const authKey = await client.organizations.getAuthKey();
+      const authKey: unknown = await client.organizations.getAuthKey();
+      if (typeof authKey === 'string') {
+        return { content: [{ type: 'text', text: JSON.stringify({ authKey }, null, 2) }] };
+      }
+      if (authKey && typeof authKey === 'object' && Object.keys(authKey).length === 0) {
+        return {
+          content: [{ type: 'text', text: 'ThreatLocker returned no auth key in a JSON body for this organization. Check that the API user can view installation auth keys.' }],
+          isError: true,
+        };
+      }
       return { content: [{ type: 'text', text: JSON.stringify(authKey, null, 2) }] };
     }
     case 'threatlocker_organizations_for_move_computers': {

@@ -53,7 +53,24 @@ function getTools(): Tool[] {
   ];
 }
 
+const APPROVAL_AUTH_ERROR =
+  'ThreatLocker rejected this API key for Approval Center endpoints (HTTP 401), even though the same key may work for other endpoints. ' +
+  'The ThreatLocker API user/role likely lacks Approval Center (approval request) permissions for this organization; ' +
+  'an admin needs to grant them in the ThreatLocker portal. Retrying will not help.';
+
 async function handleCall(toolName: string, args: Record<string, unknown>): Promise<CallToolResult> {
+  try {
+    return await dispatch(toolName, args);
+  } catch (error) {
+    const e = error as { name?: unknown; message?: unknown } | null;
+    const isAuth =
+      !!e && (e.name === 'AuthenticationError' || (typeof e.message === 'string' && e.message.startsWith('Authentication failed')));
+    if (isAuth) return { content: [{ type: 'text', text: APPROVAL_AUTH_ERROR }], isError: true };
+    throw error;
+  }
+}
+
+async function dispatch(toolName: string, args: Record<string, unknown>): Promise<CallToolResult> {
   const client = await getClient();
 
   switch (toolName) {

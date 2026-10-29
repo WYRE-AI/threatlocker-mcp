@@ -53,14 +53,10 @@ describe('threatlocker_organizations_get_auth_key', () => {
   it('calls getAuthKey scoped to whatever the current request-scoped client resolved to (no args)', async () => {
     const getAuthKey = vi.fn().mockResolvedValue({ authKey: 'redacted-in-this-test' });
     mockClient({ getAuthKey });
-
     const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
-
     expect(getAuthKey).toHaveBeenCalledWith();
     expect(getAuthKey).toHaveBeenCalledTimes(1);
-    expect(result.content[0].text).toBe(
-      JSON.stringify({ authKey: 'redacted-in-this-test' }, null, 2),
-    );
+    expect(result.content[0].text).toBe(JSON.stringify({ authKey: 'redacted-in-this-test' }, null, 2));
   });
 
   it('does not accept caller-supplied args as an override for which org the key belongs to', async () => {
@@ -69,12 +65,28 @@ describe('threatlocker_organizations_get_auth_key', () => {
     // guards against a future regression that threads an org id through here.
     const getAuthKey = vi.fn().mockResolvedValue({ authKey: 'k' });
     mockClient({ getAuthKey });
-
-    await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {
-      organizationId: 'attacker-supplied-org-id',
-    });
-
+    await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', { organizationId: 'attacker-supplied-org-id' });
     expect(getAuthKey).toHaveBeenCalledWith();
+  });
+
+  it('wraps a plain string result as { authKey }', async () => {
+    const getAuthKey = vi.fn().mockResolvedValue('raw-key');
+    mockClient({ getAuthKey });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
+    expect(JSON.parse(result.content[0].text)).toEqual({ authKey: 'raw-key' });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('returns isError for an empty {} result', async () => {
+    const getAuthKey = vi.fn().mockResolvedValue({});
+    mockClient({ getAuthKey });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/no auth key in a JSON body/);
   });
 });
 

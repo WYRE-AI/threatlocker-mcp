@@ -115,6 +115,40 @@ describe('threatlocker_approvals_get_permit_application', () => {
   });
 });
 
+describe('Approval Center authentication errors', () => {
+  it('maps an AuthenticationError to an actionable isError result', async () => {
+    const err = new Error('Authentication failed');
+    err.name = 'AuthenticationError';
+    mockClient({ getPendingCount: vi.fn().mockRejectedValue(err) });
+
+    const result = await approvalRequestsHandler.handleCall('threatlocker_approvals_pending_count', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/Approval Center/);
+    expect(result.content[0].text).toMatch(/Retrying will not help/);
+  });
+
+  it('maps a plain error whose message starts with "Authentication failed"', async () => {
+    mockClient({ get: vi.fn().mockRejectedValue(new Error('Authentication failed: bad key')) });
+
+    const result = await approvalRequestsHandler.handleCall('threatlocker_approvals_get', {
+      approvalRequestId: 'ar-1',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/HTTP 401/);
+  });
+
+  it('rethrows non-auth errors unchanged', async () => {
+    const err = new Error('Server error: 500');
+    mockClient({ getPendingCount: vi.fn().mockRejectedValue(err) });
+
+    await expect(
+      approvalRequestsHandler.handleCall('threatlocker_approvals_pending_count', {}),
+    ).rejects.toBe(err);
+  });
+});
+
 describe('unknown tool', () => {
   it('returns an isError result and does not touch the client', async () => {
     const list = vi.fn();
