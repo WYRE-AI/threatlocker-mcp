@@ -2,6 +2,16 @@
 
 ### Fixed
 
+- `threatlocker_audit_get` accepts `organizationId` (from the search row) and
+  numeric-string `sourceTableId`, and maps HTTP 500 to an actionable error
+  (WYREAI-386). `organizationId` is honored once the SDK PR that sends it as
+  `ManagedOrganizationId` is released.
+- `threatlocker_organizations_get_auth_key` now reports an explicit error
+  instead of `{}` when ThreatLocker returns no JSON key, and returns text
+  bodies once the SDK is bumped (WYREAI-386). The organization is still
+  determined only by the request-scoped credentials, never by tool args.
+- `threatlocker_approvals_*` map a 401 to a message explaining the API user
+  likely lacks Approval Center permissions (WYREAI-386).
 - HTTP transport failed open when `CONDUIT_S2S_SECRET` was unset (CWE-306).
   `/mcp` skipped service-to-service verification, the default bind was
   `0.0.0.0`, and `AUTH_MODE=gateway` fell back to process-environment

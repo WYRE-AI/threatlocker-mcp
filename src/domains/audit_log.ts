@@ -8,7 +8,9 @@ function getTools(): Tool[] {
   return [
     {
       name: 'threatlocker_audit_search',
-      description: 'Search audit log entries with optional filters.',
+      description:
+        'Search audit log entries with optional filters. Each row\'s eActionLogId, sourceTableId and organizationId ' +
+        'are the arguments for threatlocker_audit_get.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -25,7 +27,8 @@ function getTools(): Tool[] {
       name: 'threatlocker_audit_get',
       description:
         'Get one audit log entry by eActionLogId, the string id on a threatlocker_audit_search row. ' +
-        'Optional sourceTableId (integer 1-4) selects that row\'s source table. ' +
+        'Pass eActionLogId, sourceTableId and organizationId straight from the search row: sourceTableId selects the row\'s source table (integer 1-4) ' +
+        'and organizationId scopes the lookup to the org that owns the row (required for rows from child organizations). ' +
         'actionLogId is a deprecated alias and is stringified into eActionLogId. A numeric id is rejected before the request.',
       inputSchema: {
         type: 'object' as const,
@@ -41,6 +44,11 @@ function getTools(): Tool[] {
             maximum: 4,
             description:
               'Optional source table of that row. ActionLog = 1, DenyActionLog = 2, BaselineActionLog = 3, EventLogActionLog = 4.',
+          },
+          organizationId: {
+            type: 'string',
+            description:
+              'organizationId from the threatlocker_audit_search row; scopes the lookup to the org that owns the row (required for rows from child organizations).',
           },
           actionLogId: {
             type: 'string',
@@ -141,10 +149,24 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
           isError: true,
         };
       }
-      const { eActionLogId, sourceTableId } = resolved;
-      logger.info('API call: auditLog.get', { eActionLogId, sourceTableId });
-      const auditEntry = await client.auditLog.get(eActionLogId, { sourceTableId });
-      return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
+      const { eActionLogId, sourceTableId, organizationId } = resolved;
+      logger.info('API call: auditLog.get', { eActionLogId, sourceTableId, organizationId });
+      // organizationId depends on the unreleased node-threatlocker SDK PR that sends it as the
+      // ManagedOrganizationId header. Built as a variable (not a literal) so it compiles against
+      // 3.0.0, whose get() options type only has sourceTableId; 3.0.0 ignores the extra field.
+      const getOptions: { sourceTableId?: 1 | 2 | 3 | 4; organizationId?: string } = {};
+      if (sourceTableId !== undefined) getOptions.sourceTableId = sourceTableId;
+      if (organizationId !== undefined) getOptions.organizationId = organizationId;
+      try {
+        const auditEntry = await client.auditLog.get(eActionLogId, getOptions);
+        return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
+      } catch (error) {
+        if (!isHttp500(error)) throw error;
+        return {
+          content: [{ type: 'text', text: auditGet500Message(eActionLogId, sourceTableId, organizationId) }],
+          isError: true,
+        };
+      }
     }
     case 'threatlocker_audit_file_history': {
       // Object form from node-threatlocker#32 (WYREAI-386), published in
@@ -186,7 +208,38 @@ type AuditGetSuccess = {
   ok: true;
   eActionLogId: string;
   sourceTableId?: 1 | 2 | 3 | 4;
+  organizationId?: string;
 };
+
+const ORGANIZATION_ID_ERROR =
+  'threatlocker_audit_get organizationId must be a non-empty string (the organizationId on the threatlocker_audit_search row).';
+
+function isHttp500(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { message, statusCode } = error as { message?: unknown; statusCode?: unknown };
+  return statusCode === 500 || (typeof message === 'string' && message.startsWith('Server error: 500'));
+}
+
+function auditGet500Message(
+  eActionLogId: string,
+  sourceTableId: number | undefined,
+  organizationId: string | undefined,
+): string {
+  const missing = [
+    sourceTableId === undefined ? 'sourceTableId' : null,
+    organizationId === undefined ? 'organizationId' : null,
+  ].filter(Boolean);
+  const missingNote = missing.length
+    ? `Missing from this call: ${missing.join(', ')}.`
+    : 'sourceTableId and organizationId were both provided.';
+  return (
+    `ThreatLocker returned HTTP 500 for eActionLogId ${eActionLogId}. ` +
+    'This usually means the id is stale/out of retention, or the lookup ran without the row\'s organization scope or source table. ' +
+    `${missingNote} ` +
+    'Re-run threatlocker_audit_search and pass eActionLogId, sourceTableId and organizationId from the same row. ' +
+    'Do not retry the same arguments unchanged.'
+  );
+}
 
 type AuditGetFailure = { ok: false; message: string };
 
@@ -199,9 +252,22 @@ function auditGetArgs(args: Record<string, unknown>): AuditGetSuccess | AuditGet
   if (!eActionLogId) return { ok: false, message: AUDIT_GET_ARG_ERROR };
   if (NUMERIC_ACTION_LOG_ID.test(eActionLogId)) return { ok: false, message: AUDIT_GET_NUMERIC_ID_ERROR };
 
-  if (args.sourceTableId == null) return { ok: true, eActionLogId };
-  if (!isSourceTableId(args.sourceTableId)) return { ok: false, message: SOURCE_TABLE_ID_ERROR };
-  return { ok: true, eActionLogId, sourceTableId: args.sourceTableId };
+  const result: AuditGetSuccess = { ok: true, eActionLogId };
+
+  if (args.organizationId != null) {
+    const organizationId = nonEmptyString(args.organizationId);
+    if (!organizationId) return { ok: false, message: ORGANIZATION_ID_ERROR };
+    result.organizationId = organizationId;
+  }
+
+  if (args.sourceTableId != null) {
+    // Models often send "1".."4" as strings.
+    const raw = args.sourceTableId;
+    const sourceTableId = typeof raw === 'string' && /^[1-4]$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+    if (!isSourceTableId(sourceTableId)) return { ok: false, message: SOURCE_TABLE_ID_ERROR };
+    result.sourceTableId = sourceTableId;
+  }
+  return result;
 }
 
 function stringifiedId(value: unknown): string | undefined {

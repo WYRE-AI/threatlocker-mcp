@@ -32,14 +32,16 @@ A Model Context Protocol (MCP) server that provides AI assistants with access to
 - `threatlocker_approvals_pending_count` - Get count of pending approvals
 - `threatlocker_approvals_get_permit_application` - Get permit application details
 
+> **Troubleshooting:** if approval tools return an HTTP 401 / "Authentication failed" while audit tools work with the same key, the ThreatLocker API user/role lacks Approval Center permissions. An admin must grant them in the ThreatLocker portal; retrying will not help.
+
 ### Audit Log
 - `threatlocker_audit_search` - Search audit log entries with filters
-- `threatlocker_audit_get` - Get one audit log entry by `eActionLogId` from a search row (deprecated alias: `actionLogId`)
+- `threatlocker_audit_get` - Get one audit log entry; pass `eActionLogId`, `sourceTableId` and `organizationId` straight from the `threatlocker_audit_search` row (`organizationId` is required for rows from child organizations; deprecated alias: `actionLogId`). HTTP 500 is reported as an actionable error: re-search and pass all three fields from the same row
 - `threatlocker_audit_file_history` - Get audit history for a file. Requires `fullPath` and either `hostname` or `computerId`
 
 ### Organizations
 - `threatlocker_organizations_list_children` - List child organizations
-- `threatlocker_organizations_get_auth_key` - Get organization auth key
+- `threatlocker_organizations_get_auth_key` - Get the installation auth key for the organization the configured credentials are scoped to. The result is a sensitive key and is never logged. Reports an explicit error instead of `{}` when ThreatLocker returns no JSON key, and returns text bodies once the SDK is bumped
 - `threatlocker_organizations_for_move_computers` - Get organizations for computer moves
 
 ## Configuration
