@@ -151,9 +151,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       }
       const { eActionLogId, sourceTableId, organizationId } = resolved;
       logger.info('API call: auditLog.get', { eActionLogId, sourceTableId, organizationId });
-      // organizationId depends on the unreleased node-threatlocker SDK PR that sends it as the
-      // ManagedOrganizationId header. Built as a variable (not a literal) so it compiles against
-      // 3.0.0, whose get() options type only has sourceTableId; 3.0.0 ignores the extra field.
+      // SDK 3.0.2 sends organizationId as the ManagedOrganizationId header
+      // to scope the lookup to the organization that owns the audit row.
       const getOptions: { sourceTableId?: 1 | 2 | 3 | 4; organizationId?: string } = {};
       if (sourceTableId !== undefined) getOptions.sourceTableId = sourceTableId;
       if (organizationId !== undefined) getOptions.organizationId = organizationId;

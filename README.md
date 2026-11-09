@@ -41,7 +41,7 @@ A Model Context Protocol (MCP) server that provides AI assistants with access to
 
 ### Organizations
 - `threatlocker_organizations_list_children` - List child organizations
-- `threatlocker_organizations_get_auth_key` - Get the installation auth key for the organization the configured credentials are scoped to. The result is a sensitive key and is never logged. Reports an explicit error instead of `{}` when ThreatLocker returns no JSON key, and returns text bodies once the SDK is bumped
+- `threatlocker_organizations_get_auth_key` - Get the installation auth key for the organization the configured credentials are scoped to. The result is a sensitive key and is never logged. Reports an explicit error instead of `{}` when ThreatLocker returns no JSON key, and returns text bodies with SDK 3.0.2
 - `threatlocker_organizations_for_move_computers` - Get organizations for computer moves
 
 ## Configuration
