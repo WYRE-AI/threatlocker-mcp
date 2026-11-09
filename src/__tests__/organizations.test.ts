@@ -94,12 +94,30 @@ describe('threatlocker_organizations_get_auth_key', () => {
   });
 
   it('accepts a nonempty deprecated key field', async () => {
-    const body = { authKey: '', key: 'test-key' };
+    const body = { authKey: '', key: '  test-key  ', organizationId: 'org-1' };
     mockClient({ getAuthKey: vi.fn().mockResolvedValue(body) });
 
     const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
 
     expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual({ ...body, authKey: 'test-key' });
+  });
+
+  it.each([undefined, '   ', 123])('normalizes a legacy key when authKey is unusable: %j', async (authKey) => {
+    mockClient({ getAuthKey: vi.fn().mockResolvedValue({ authKey, key: '  test-key  ' }) });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
+    expect(JSON.parse(result.content[0].text)).toEqual({ authKey: 'test-key', key: '  test-key  ' });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('preserves a nonempty authKey when a legacy key is also present', async () => {
+    const body = { authKey: 'current-key', key: 'legacy-key' };
+    mockClient({ getAuthKey: vi.fn().mockResolvedValue(body) });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
     expect(JSON.parse(result.content[0].text)).toEqual(body);
   });
 

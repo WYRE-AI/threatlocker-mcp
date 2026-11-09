@@ -65,6 +65,9 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
           isError: true,
         };
       }
+      if ((typeof keys.authKey !== 'string' || !keys.authKey.trim()) && typeof keys.key === 'string' && keys.key.trim()) {
+        keys.authKey = keys.key.trim();
+      }
       return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
     }
     case 'threatlocker_organizations_for_move_computers': {
