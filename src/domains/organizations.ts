@@ -19,7 +19,9 @@ function getTools(): Tool[] {
     },
     {
       name: 'threatlocker_organizations_get_auth_key',
-      description: 'Get the organization auth key.',
+      description:
+        'Get the installation auth key for the organization the configured credentials are scoped to. ' +
+        'The returned value is a sensitive installation key; do not log or share it.',
       inputSchema: {
         type: 'object' as const,
         properties: {},
@@ -51,9 +53,22 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'threatlocker_organizations_get_auth_key': {
+      // Never log the key itself. The org is determined solely by the request-scoped client
+      // (tenant credentials); tool args must never select it.
       logger.info('API call: organizations.getAuthKey');
-      const authKey = await client.organizations.getAuthKey();
-      return { content: [{ type: 'text', text: JSON.stringify(authKey, null, 2) }] };
+      const authKey: unknown = await client.organizations.getAuthKey();
+      const body = typeof authKey === 'string' ? { authKey } : authKey;
+      const keys = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+      if (![keys.authKey, keys.key].some((key) => typeof key === 'string' && key.trim().length > 0)) {
+        return {
+          content: [{ type: 'text', text: 'ThreatLocker returned no auth key in a JSON body for this organization. Check that the API user can view installation auth keys.' }],
+          isError: true,
+        };
+      }
+      if ((typeof keys.authKey !== 'string' || !keys.authKey.trim()) && typeof keys.key === 'string' && keys.key.trim()) {
+        keys.authKey = keys.key.trim();
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
     }
     case 'threatlocker_organizations_for_move_computers': {
       logger.info('API call: organizations.listForMoveComputers');

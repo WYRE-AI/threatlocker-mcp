@@ -209,6 +209,97 @@ describe('threatlocker_audit_get', () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it('forwards a trimmed organizationId in the options', async () => {
+    const get = vi.fn().mockResolvedValue({});
+    mockClient({ get });
+
+    await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      sourceTableId: 2,
+      organizationId: '  org-guid  ',
+    });
+
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: 2, organizationId: 'org-guid' });
+  });
+
+  it('accepts a numeric-string sourceTableId', async () => {
+    const get = vi.fn().mockResolvedValue({});
+    mockClient({ get });
+
+    await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      sourceTableId: '3',
+    });
+
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: 3 });
+  });
+
+  it.each([5, '5', 'abc', 1.5])('rejects sourceTableId %j', async (sourceTableId) => {
+    const get = vi.fn();
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      sourceTableId,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it.each([42, '   ', {}])('rejects invalid organizationId %j', async (organizationId) => {
+    const get = vi.fn();
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      organizationId,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/organizationId/);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('maps HTTP 500 to an actionable error naming the missing fields', async () => {
+    const get = vi.fn().mockRejectedValue(new Error('Server error: 500 after 4 attempts'));
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+    });
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0].text;
+    expect(text).toMatch(/HTTP 500/);
+    expect(text).toMatch(/Missing from this call: sourceTableId, organizationId/);
+    expect(text).toMatch(/threatlocker_audit_search/);
+    expect(text).toMatch(/Do not retry/);
+  });
+
+  it('maps an error with statusCode 500 and lists only the missing field', async () => {
+    const get = vi.fn().mockRejectedValue(Object.assign(new Error('boom'), { statusCode: 500 }));
+    mockClient({ get });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
+      eActionLogId: 'opaque-id',
+      sourceTableId: 1,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/Missing from this call: organizationId\./);
+  });
+
+  it('rethrows non-500 errors', async () => {
+    const err = new Error('Authentication failed');
+    const get = vi.fn().mockRejectedValue(err);
+    mockClient({ get });
+
+    await expect(
+      auditLogHandler.handleCall('threatlocker_audit_get', { eActionLogId: 'opaque-id' }),
+    ).rejects.toBe(err);
+  });
+
   it('rejects a sourceTableId outside 1-4 and does not call get', async () => {
     const get = vi.fn();
     mockClient({ get });
