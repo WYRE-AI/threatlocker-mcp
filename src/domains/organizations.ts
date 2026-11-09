@@ -57,16 +57,15 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       // (tenant credentials); tool args must never select it.
       logger.info('API call: organizations.getAuthKey');
       const authKey: unknown = await client.organizations.getAuthKey();
-      if (typeof authKey === 'string') {
-        return { content: [{ type: 'text', text: JSON.stringify({ authKey }, null, 2) }] };
-      }
-      if (authKey && typeof authKey === 'object' && Object.keys(authKey).length === 0) {
+      const body = typeof authKey === 'string' ? { authKey } : authKey;
+      const keys = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+      if (![keys.authKey, keys.key].some((key) => typeof key === 'string' && key.trim().length > 0)) {
         return {
           content: [{ type: 'text', text: 'ThreatLocker returned no auth key in a JSON body for this organization. Check that the API user can view installation auth keys.' }],
           isError: true,
         };
       }
-      return { content: [{ type: 'text', text: JSON.stringify(authKey, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
     }
     case 'threatlocker_organizations_for_move_computers': {
       logger.info('API call: organizations.listForMoveComputers');

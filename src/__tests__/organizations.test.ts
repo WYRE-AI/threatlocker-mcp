@@ -79,6 +79,30 @@ describe('threatlocker_organizations_get_auth_key', () => {
     expect(result.isError).toBeUndefined();
   });
 
+  it.each([
+    { organizationId: 'org-1' },
+    { authKey: '' },
+    '',
+    { authKey: '   ' },
+  ])('returns isError for an unusable key result: %j', async (body) => {
+    mockClient({ getAuthKey: vi.fn().mockResolvedValue(body) });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/no auth key in a JSON body/);
+  });
+
+  it('accepts a nonempty deprecated key field', async () => {
+    const body = { authKey: '', key: 'test-key' };
+    mockClient({ getAuthKey: vi.fn().mockResolvedValue(body) });
+
+    const result = await organizationsHandler.handleCall('threatlocker_organizations_get_auth_key', {});
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual(body);
+  });
+
   it('returns isError for an empty {} result', async () => {
     const getAuthKey = vi.fn().mockResolvedValue({});
     mockClient({ getAuthKey });

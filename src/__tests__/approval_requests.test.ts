@@ -125,11 +125,13 @@ describe('Approval Center authentication errors', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/Approval Center/);
-    expect(result.content[0].text).toMatch(/Retrying will not help/);
+    expect(result.content[0].text).toMatch(/HTTP 401/);
+    expect(result.content[0].text).toMatch(/First verify the API key and organization/);
+    expect(result.content[0].text).toMatch(/If the key works for other endpoints/);
   });
 
   it('maps a plain error whose message starts with "Authentication failed"', async () => {
-    mockClient({ get: vi.fn().mockRejectedValue(new Error('Authentication failed: bad key')) });
+    mockClient({ get: vi.fn().mockRejectedValue(new Error('Authentication failed: bad key test-secret')) });
 
     const result = await approvalRequestsHandler.handleCall('threatlocker_approvals_get', {
       approvalRequestId: 'ar-1',
@@ -137,6 +139,8 @@ describe('Approval Center authentication errors', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/HTTP 401/);
+    expect(result.content[0].text).toMatch(/First verify the API key and organization.*If the key works.*Approval Center/);
+    expect(result.content[0].text).not.toMatch(/Retrying will not help|test-secret/);
   });
 
   it('rethrows non-auth errors unchanged', async () => {
