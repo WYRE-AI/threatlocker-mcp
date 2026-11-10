@@ -9,8 +9,10 @@ function getTools(): Tool[] {
     {
       name: 'threatlocker_audit_search',
       description:
-        'Search audit log entries with optional filters. Each row\'s eActionLogId, sourceTableId and organizationId ' +
-        'are the arguments for threatlocker_audit_get.',
+        'Search audit log entries with optional filters. Each row includes eActionLogId and organizationId when the ' +
+        'upstream search returns them. sourceTableId (1-4) is included when present or under a known alias ' +
+        '(SourceTableId, sourceTable, SourceTable). Pass those three fields to threatlocker_audit_get. ' +
+        'If a row has no sourceTableId, audit_get will probe tables 1-4.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -27,8 +29,9 @@ function getTools(): Tool[] {
       name: 'threatlocker_audit_get',
       description:
         'Get one audit log entry by eActionLogId, the string id on a threatlocker_audit_search row. ' +
-        'Pass eActionLogId, sourceTableId and organizationId straight from the search row: sourceTableId selects the row\'s source table (integer 1-4) ' +
+        'Pass eActionLogId, sourceTableId and organizationId from the same search row when present: sourceTableId selects the row\'s source table (integer 1-4) ' +
         'and organizationId scopes the lookup to the org that owns the row (required for rows from child organizations). ' +
+        'If sourceTableId is omitted, the tool probes ActionLogGetByIdV2 with tables 1-4 and returns the first success. ' +
         'actionLogId is a deprecated alias and is stringified into eActionLogId. A numeric id is rejected before the request.',
       inputSchema: {
         type: 'object' as const,
@@ -137,7 +140,8 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       };
       logger.info('API call: auditLog.search', params);
       const result = await client.auditLog.search(params);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      const normalized = normalizeAuditSearchResult(result);
+      return { content: [{ type: 'text', text: JSON.stringify(normalized, null, 2) }] };
     }
     case 'threatlocker_audit_get': {
       // node-threatlocker@3.0.0 (WYREAI-386): get(id: string, { sourceTableId }?)
@@ -157,12 +161,13 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       if (sourceTableId !== undefined) getOptions.sourceTableId = sourceTableId;
       if (organizationId !== undefined) getOptions.organizationId = organizationId;
       try {
-        const auditEntry = await client.auditLog.get(eActionLogId, getOptions);
+        const auditEntry = await getAuditEntry(client, eActionLogId, getOptions);
         return { content: [{ type: 'text', text: JSON.stringify(auditEntry, null, 2) }] };
       } catch (error) {
         if (!isHttp500(error)) throw error;
+        const probed = sourceTableId === undefined ? SOURCE_TABLE_IDS : undefined;
         return {
-          content: [{ type: 'text', text: auditGet500Message(eActionLogId, sourceTableId, organizationId) }],
+          content: [{ type: 'text', text: auditGet500Message(eActionLogId, sourceTableId, organizationId, probed) }],
           isError: true,
         };
       }
@@ -185,6 +190,119 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
     default:
       return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
+}
+
+/** Official GetByIdV2 source-table ids. Used to probe when search omits sourceTableId. */
+export const SOURCE_TABLE_IDS = [1, 2, 3, 4] as const;
+
+const SOURCE_TABLE_ID_ALIASES = [
+  'sourceTableId',
+  'SourceTableId',
+  'sourceTable',
+  'SourceTable',
+  'eSourceTableId',
+] as const;
+
+const ORGANIZATION_ID_ALIASES = ['organizationId', 'OrganizationId', 'orgId'] as const;
+
+/**
+ * Map a search-row alias onto sourceTableId 1-4. Official
+ * ActionLogGetByParametersV2 docs do not list sourceTableId as a response
+ * field; some payloads still carry it under a PascalCase or shortened name.
+ * Returns undefined when nothing coerceable is present — never invents a table.
+ */
+export function coerceSourceTableId(value: unknown): 1 | 2 | 3 | 4 | undefined {
+  if (typeof value === 'number' && isSourceTableId(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^[1-4]$/.test(trimmed)) return Number(trimmed) as 1 | 2 | 3 | 4;
+    const named: Record<string, 1 | 2 | 3 | 4> = {
+      actionlog: 1,
+      denyactionlog: 2,
+      deny: 2,
+      baselineactionlog: 3,
+      baseline: 3,
+      eventlogactionlog: 4,
+      eventlog: 4,
+    };
+    return named[trimmed.toLowerCase()];
+  }
+  return undefined;
+}
+
+/**
+ * Copy a single ActionLog search row and, when present, canonicalize
+ * sourceTableId (1-4) and organizationId from known aliases. Accepts a
+ * bare object row. Never invents a sourceTableId if none is coerceable.
+ */
+export function normalizeAuditRow(row: unknown): unknown {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  const rec = row as Record<string, unknown>;
+  const sourceTableId =
+    coerceSourceTableId(rec.sourceTableId) ??
+    SOURCE_TABLE_ID_ALIASES.reduce<1 | 2 | 3 | 4 | undefined>(
+      (found, key) => found ?? coerceSourceTableId(rec[key]),
+      undefined,
+    );
+  const organizationId = ORGANIZATION_ID_ALIASES.map((key) => nonEmptyString(rec[key])).find(Boolean);
+  return {
+    ...rec,
+    ...(sourceTableId !== undefined ? { sourceTableId } : {}),
+    ...(organizationId !== undefined ? { organizationId } : {}),
+  };
+}
+
+/**
+ * Normalize an ActionLog search payload so callers can read sourceTableId
+ * and organizationId from each row. Accepts a bare array of rows, or an
+ * object whose `items`, `data`, `logs`, or `results` array is mapped.
+ * Never invents a sourceTableId.
+ */
+export function normalizeAuditSearchResult(result: unknown): unknown {
+  if (Array.isArray(result)) return result.map(normalizeAuditRow);
+  if (!result || typeof result !== 'object') return result;
+  const rec = result as Record<string, unknown>;
+  const copy: Record<string, unknown> = { ...rec };
+  for (const key of ['items', 'data', 'logs', 'results']) {
+    if (Array.isArray(copy[key])) copy[key] = (copy[key] as unknown[]).map(normalizeAuditRow);
+  }
+  return copy;
+}
+
+type AuditGetClient = {
+  auditLog: {
+    get: (
+      id: string,
+      options?: { sourceTableId?: 1 | 2 | 3 | 4; organizationId?: string },
+    ) => Promise<unknown>;
+  };
+};
+
+/**
+ * When sourceTableId is already known, call get() once.
+ * When it is omitted (search often does not return it), probe tables 1-4
+ * and return the first success. A non-500 error is not retried against
+ * another table.
+ */
+async function getAuditEntry(
+  client: AuditGetClient,
+  eActionLogId: string,
+  options: { sourceTableId?: 1 | 2 | 3 | 4; organizationId?: string },
+): Promise<unknown> {
+  if (options.sourceTableId !== undefined) {
+    return client.auditLog.get(eActionLogId, options);
+  }
+  let lastError: unknown;
+  for (const sourceTableId of SOURCE_TABLE_IDS) {
+    try {
+      logger.info('API call: auditLog.get probe', { eActionLogId, sourceTableId, organizationId: options.organizationId });
+      return await client.auditLog.get(eActionLogId, { ...options, sourceTableId });
+    } catch (error) {
+      if (!isHttp500(error)) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error('Server error: 500');
 }
 
 const AUDIT_GET_ARG_ERROR =
@@ -223,6 +341,7 @@ function auditGet500Message(
   eActionLogId: string,
   sourceTableId: number | undefined,
   organizationId: string | undefined,
+  probedTables?: readonly number[],
 ): string {
   const missing = [
     sourceTableId === undefined ? 'sourceTableId' : null,
@@ -231,11 +350,14 @@ function auditGet500Message(
   const missingNote = missing.length
     ? `Missing from this call: ${missing.join(', ')}.`
     : 'sourceTableId and organizationId were both provided.';
+  const probeNote = probedTables?.length
+    ? ` Already probed ActionLogGetByIdV2 with sourceTableId ${probedTables.join(', ')}.`
+    : '';
   return (
     `ThreatLocker returned HTTP 500 for eActionLogId ${eActionLogId}. ` +
     'This usually means the id is stale/out of retention, or the lookup ran without the row\'s organization scope or source table. ' +
-    `${missingNote} ` +
-    'Re-run threatlocker_audit_search and pass eActionLogId, sourceTableId and organizationId from the same row. ' +
+    `${missingNote}${probeNote} ` +
+    'Re-run threatlocker_audit_search and pass eActionLogId, sourceTableId and organizationId from the same row when they are present. ' +
     'Do not retry the same arguments unchanged.'
   );
 }

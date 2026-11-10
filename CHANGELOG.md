@@ -2,6 +2,19 @@
 
 ### Fixed
 
+- `threatlocker_audit_search` now copies `sourceTableId` and `organizationId`
+  onto each row when the upstream payload uses a known alias (`SourceTableId`,
+  `sourceTable`, `SourceTable`, `eSourceTableId`, `OrganizationId`, `orgId`).
+  Official ActionLogGetByParametersV2 docs do not list `sourceTableId` as a
+  search response field, and EpiOn (HS 324105959143 / WYREAI-386) confirmed
+  live search rows can omit it entirely. The tool does not invent a table id.
+- `threatlocker_audit_get` no longer requires the caller to supply
+  `sourceTableId`. When it is omitted, the tool probes
+  `ActionLogGetByIdV2` with source tables 1-4 and returns the first success
+  (a non-500 error is not retried against another table). A 500 after all
+  four probes still returns the actionable error. A caller-supplied
+  `sourceTableId` is still sent as a single request.
+
 - Bumped `@wyre-ai/node-threatlocker` to `^3.0.2` (locked to 3.0.2) for
   the released audit organization-scoping and non-JSON response fixes (WYREAI-386).
 
