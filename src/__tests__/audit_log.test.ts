@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { auditLogHandler } from '../domains/audit_log.js';
+import { auditLogHandler, coerceSourceTableId, normalizeAuditSearchResult } from '../domains/audit_log.js';
 import { getClient } from '../utils/client.js';
 
 vi.mock('../utils/client.js', () => ({
@@ -83,17 +83,71 @@ describe('threatlocker_audit_search', () => {
     expect(params.endDate).toBeUndefined();
   });
 
-  it('returns the raw search results as JSON', async () => {
-    const search = vi.fn().mockResolvedValue({ items: [{ id: 'a1' }], total: 1 });
+  it('returns the search results as JSON, copying sourceTableId aliases onto each row', async () => {
+    const search = vi.fn().mockResolvedValue({
+      items: [
+        { eActionLogId: 'row-1', SourceTableId: '2', OrganizationId: 'org-a' },
+        { eActionLogId: 'row-2', actionType: 'Execute' },
+      ],
+      total: 2,
+    });
     mockClient({ search });
 
     const result = await auditLogHandler.handleCall('threatlocker_audit_search', {
       searchText: 'x',
     });
 
-    expect(result.content[0].text).toBe(
-      JSON.stringify({ items: [{ id: 'a1' }], total: 1 }, null, 2),
-    );
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      items: [
+        {
+          eActionLogId: 'row-1',
+          SourceTableId: '2',
+          OrganizationId: 'org-a',
+          sourceTableId: 2,
+          organizationId: 'org-a',
+        },
+        { eActionLogId: 'row-2', actionType: 'Execute' },
+      ],
+      total: 2,
+    });
+  });
+
+  it('does not invent sourceTableId when the upstream row has no alias', async () => {
+    const search = vi.fn().mockResolvedValue({
+      items: [{ eActionLogId: 'row-1', organizationId: 'org-a' }],
+    });
+    mockClient({ search });
+
+    const result = await auditLogHandler.handleCall('threatlocker_audit_search', {
+      searchText: 'x',
+    });
+
+    const items = JSON.parse(result.content[0].text).items;
+    expect(items[0]).toEqual({ eActionLogId: 'row-1', organizationId: 'org-a' });
+    expect(items[0]).not.toHaveProperty('sourceTableId');
+  });
+});
+
+describe('normalizeAuditSearchResult / coerceSourceTableId', () => {
+  it('coerces numeric, numeric-string, and known table names', () => {
+    expect(coerceSourceTableId(1)).toBe(1);
+    expect(coerceSourceTableId('  4  ')).toBe(4);
+    expect(coerceSourceTableId('DenyActionLog')).toBe(2);
+    expect(coerceSourceTableId('baseline')).toBe(3);
+    expect(coerceSourceTableId(0)).toBeUndefined();
+    expect(coerceSourceTableId('5')).toBeUndefined();
+  });
+
+  it('maps a bare array and PascalCase aliases, and leaves unknown rows alone', () => {
+    expect(
+      normalizeAuditSearchResult([
+        { eActionLogId: 'a', sourceTable: 'ActionLog' },
+        { eActionLogId: 'b' },
+      ]),
+    ).toEqual([
+      { eActionLogId: 'a', sourceTable: 'ActionLog', sourceTableId: 1 },
+      { eActionLogId: 'b' },
+    ]);
   });
 });
 
@@ -136,15 +190,35 @@ describe('threatlocker_audit_get', () => {
     expect(result.isError).toBeUndefined();
   });
 
-  it('omits sourceTableId when the caller does not set it', async () => {
-    const get = vi.fn().mockResolvedValue({ eActionLogId: 'opaque-id' });
+  it('probes sourceTableId 1-4 when the caller does not set it, and returns the first success', async () => {
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('Server error: 500'), { statusCode: 500 }))
+      .mockResolvedValueOnce({ eActionLogId: 'opaque-id', sourceTableId: 2 });
     mockClient({ get });
 
-    await auditLogHandler.handleCall('threatlocker_audit_get', {
+    const result = await auditLogHandler.handleCall('threatlocker_audit_get', {
       eActionLogId: 'opaque-id',
+      organizationId: 'org-guid',
     });
 
-    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: undefined });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get).toHaveBeenNthCalledWith(1, 'opaque-id', { sourceTableId: 1, organizationId: 'org-guid' });
+    expect(get).toHaveBeenNthCalledWith(2, 'opaque-id', { sourceTableId: 2, organizationId: 'org-guid' });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual({ eActionLogId: 'opaque-id', sourceTableId: 2 });
+  });
+
+  it('does not probe further after a non-500 error', async () => {
+    const err = new Error('Authentication failed');
+    const get = vi.fn().mockRejectedValue(err);
+    mockClient({ get });
+
+    await expect(
+      auditLogHandler.handleCall('threatlocker_audit_get', { eActionLogId: 'opaque-id' }),
+    ).rejects.toBe(err);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith('opaque-id', { sourceTableId: 1 });
   });
 
   it('stringifies the deprecated actionLogId alias when eActionLogId is absent', async () => {
@@ -155,7 +229,7 @@ describe('threatlocker_audit_get', () => {
       actionLogId: '  al-1  ',
     });
 
-    expect(get).toHaveBeenCalledWith('al-1', { sourceTableId: undefined });
+    expect(get).toHaveBeenCalledWith('al-1', { sourceTableId: 1 });
     expect(result.content[0].text).toBe(JSON.stringify({ eActionLogId: 'al-1' }, null, 2));
   });
 
@@ -261,7 +335,7 @@ describe('threatlocker_audit_get', () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it('maps HTTP 500 to an actionable error naming the missing fields', async () => {
+  it('maps HTTP 500 to an actionable error naming the missing fields after probing tables 1-4', async () => {
     const get = vi.fn().mockRejectedValue(new Error('Server error: 500 after 4 attempts'));
     mockClient({ get });
 
@@ -270,9 +344,12 @@ describe('threatlocker_audit_get', () => {
     });
 
     expect(result.isError).toBe(true);
+    expect(get).toHaveBeenCalledTimes(4);
+    expect(get.mock.calls.map((call) => call[1].sourceTableId)).toEqual([1, 2, 3, 4]);
     const text = result.content[0].text;
     expect(text).toMatch(/HTTP 500/);
     expect(text).toMatch(/Missing from this call: sourceTableId, organizationId/);
+    expect(text).toMatch(/Already probed ActionLogGetByIdV2 with sourceTableId 1, 2, 3, 4/);
     expect(text).toMatch(/threatlocker_audit_search/);
     expect(text).toMatch(/Do not retry/);
   });
