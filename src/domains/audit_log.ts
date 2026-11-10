@@ -230,6 +230,11 @@ export function coerceSourceTableId(value: unknown): 1 | 2 | 3 | 4 | undefined {
   return undefined;
 }
 
+/**
+ * Copy a single ActionLog search row and, when present, canonicalize
+ * sourceTableId (1-4) and organizationId from known aliases. Accepts a
+ * bare object row. Never invents a sourceTableId if none is coerceable.
+ */
 export function normalizeAuditRow(row: unknown): unknown {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
   const rec = row as Record<string, unknown>;
@@ -247,6 +252,12 @@ export function normalizeAuditRow(row: unknown): unknown {
   };
 }
 
+/**
+ * Normalize an ActionLog search payload so callers can read sourceTableId
+ * and organizationId from each row. Accepts a bare array of rows, or an
+ * object whose `items`, `data`, `logs`, or `results` array is mapped.
+ * Never invents a sourceTableId.
+ */
 export function normalizeAuditSearchResult(result: unknown): unknown {
   if (Array.isArray(result)) return result.map(normalizeAuditRow);
   if (!result || typeof result !== 'object') return result;
