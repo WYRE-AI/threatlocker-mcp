@@ -83,6 +83,51 @@ describe('threatlocker_audit_search', () => {
     expect(params.endDate).toBeUndefined();
   });
 
+  it('passes a trimmed hostname filter through to auditLog.search', async () => {
+    const search = vi.fn().mockResolvedValue({ items: [] });
+    mockClient({ search });
+
+    await auditLogHandler.handleCall('threatlocker_audit_search', {
+      searchText: '*setup.msi',
+      hostname: '  WS-01  ',
+      startDate: '2026-01-01T00:00:00Z',
+      endDate: '2026-01-01T01:00:00Z',
+      childOrganizations: true,
+    });
+
+    expect(search).toHaveBeenCalledWith({
+      searchText: '*setup.msi',
+      hostname: 'WS-01',
+      startDate: '2026-01-01T00:00:00Z',
+      endDate: '2026-01-01T01:00:00Z',
+      pageNumber: undefined,
+      pageSize: undefined,
+      childOrganizations: true,
+    });
+  });
+
+  it('does not send a blank hostname', async () => {
+    const search = vi.fn().mockResolvedValue({ items: [] });
+    mockClient({ search });
+
+    await auditLogHandler.handleCall('threatlocker_audit_search', {
+      searchText: '*setup.msi',
+      hostname: '   ',
+    });
+
+    expect(search.mock.calls[0][0]).not.toHaveProperty('hostname');
+  });
+
+  it('describes searchText as a full-path filter with wildcards and exposes hostname', () => {
+    const tool = auditLogHandler.getTools().find((t) => t.name === 'threatlocker_audit_search');
+    const props = (tool?.inputSchema as { properties: Record<string, { description?: string }> }).properties;
+
+    expect(props.searchText.description).toMatch(/fullPath/);
+    expect(props.searchText.description).toMatch(/wildcard/);
+    expect(props.hostname.description).toMatch(/hostname/i);
+    expect(tool?.description).toMatch(/not free text/);
+  });
+
   it('returns the search results as JSON, copying sourceTableId aliases onto each row', async () => {
     const search = vi.fn().mockResolvedValue({
       items: [
@@ -465,6 +510,42 @@ describe('threatlocker_audit_file_history', () => {
       pageNumber: 3,
       pageSize: 25,
     });
+  });
+
+  it('exposes organizationId for computers in child organizations', () => {
+    const schema = tool()?.inputSchema as { properties?: Record<string, { description?: string }> };
+    expect(schema.properties?.organizationId?.description).toMatch(/child organization/);
+    expect(tool()?.description).toMatch(/organizationId/);
+  });
+
+  it('forwards a trimmed organizationId to getFileHistory', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    mockClient({ getFileHistory });
+
+    await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\Temp\\setup.msi',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+      organizationId: '  0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8  ',
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({
+      fullPath: 'C:\\Temp\\setup.msi',
+      computerId: '3f1c2a90-7b04-4e1d-9c55-0a1b2c3d4e5f',
+      organizationId: '0b1c2d3e-4f50-4a61-8b72-93a4b5c6d7e8',
+    });
+  });
+
+  it('drops a blank organizationId', async () => {
+    const getFileHistory = vi.fn().mockResolvedValue([]);
+    mockClient({ getFileHistory });
+
+    await auditLogHandler.handleCall('threatlocker_audit_file_history', {
+      fullPath: 'C:\\App\\app.exe',
+      hostname: 'HOST',
+      organizationId: '   ',
+    });
+
+    expect(getFileHistory).toHaveBeenCalledWith({ fullPath: 'C:\\App\\app.exe', hostname: 'HOST' });
   });
 
   it('rejects fullPath alone and does not call getFileHistory', async () => {

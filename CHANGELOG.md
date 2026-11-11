@@ -2,6 +2,16 @@
 
 ### Fixed
 
+- `threatlocker_audit_search`: `searchText` is now documented as what it is, a file path
+  filter sent as ThreatLocker `fullPath` that matches the whole path (full path or `*`
+  wildcards). Searching a hostname or a bare file name returned nothing with no hint why.
+  New `hostname` parameter filters by computer (the SDK already sent `hostname`; the tool
+  did not expose it). `pageSize` description corrected to the real default of 25.
+- `threatlocker_audit_file_history`: new optional `organizationId`, forwarded to
+  `getFileHistory()` so the SDK can send it as `ManagedOrganizationId`. Without it a
+  computer in a child organization returned an empty history. Takes effect with a
+  node-threatlocker release that supports `getFileHistory({ organizationId })`; older SDKs
+  ignore the field.
 - `threatlocker_audit_search` now copies `sourceTableId` and `organizationId`
   onto each row when the upstream payload uses a known alias (`SourceTableId`,
   `sourceTable`, `SourceTable`, `eSourceTableId`, `OrganizationId`, `orgId`).

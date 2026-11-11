@@ -9,19 +9,34 @@ function getTools(): Tool[] {
     {
       name: 'threatlocker_audit_search',
       description:
-        'Search audit log entries with optional filters. Each row includes eActionLogId and organizationId when the ' +
+        'Search audit log entries with optional filters. searchText is a FILE PATH filter (ThreatLocker fullPath), not ' +
+        'free text: pass the full path or use * wildcards (example: *\\setup.msi). A bare file name, ' +
+        'hostname or user name matches nothing. Use hostname to filter by computer. Computers in child organizations ' +
+        'need childOrganizations: true. Each row includes eActionLogId and organizationId when the ' +
         'upstream search returns them. sourceTableId (1-4) is included when present or under a known alias ' +
         '(SourceTableId, sourceTable, SourceTable). Pass those three fields to threatlocker_audit_get. ' +
         'If a row has no sourceTableId, audit_get will probe tables 1-4.',
       inputSchema: {
         type: 'object' as const,
         properties: {
-          searchText: { type: 'string', description: 'Search text filter' },
+          searchText: {
+            type: 'string',
+            description:
+              'File path filter, sent as ThreatLocker fullPath. Matches the whole path: give the full path ' +
+              '(c:\\windows\\...\\setup.msi) or use * wildcards (*setup.msi, *\\vendor*). Not a hostname or user name.',
+          },
+          hostname: {
+            type: 'string',
+            description: 'Computer hostname filter (example: WS-01). Combine with searchText and a date range to narrow results.',
+          },
           startDate: { type: 'string', description: 'Start date filter (ISO 8601)' },
           endDate: { type: 'string', description: 'End date filter (ISO 8601)' },
           pageNumber: { type: 'number', description: 'Page number (default 1)' },
-          pageSize: { type: 'number', description: 'Page size (default 50)' },
-          childOrganizations: { type: 'boolean', description: 'Include child organizations' },
+          pageSize: { type: 'number', description: 'Page size (default 25)' },
+          childOrganizations: {
+            type: 'boolean',
+            description: 'Include child organizations. Needed to find rows from computers in child organizations.',
+          },
         },
       },
     },
@@ -67,7 +82,8 @@ function getTools(): Tool[] {
     {
       name: 'threatlocker_audit_file_history',
       description:
-        'Get audit history for a file on one computer. fullPath is required, plus hostname or computerId (a GUID). The Portal file-history API returns HTTP 417 when only fullPath is sent.',
+        'Get audit history for a file on one computer. fullPath is required, plus hostname or computerId (a GUID). The Portal file-history API returns HTTP 417 when only fullPath is sent. ' +
+        'For a computer in a child organization also pass organizationId (the organizationId on its threatlocker_computers_list row or an audit search row); without it the lookup runs in the API key\'s own organization and returns an empty list.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -87,6 +103,11 @@ function getTools(): Tool[] {
           },
           pageNumber: { type: 'number', description: 'Optional page number.' },
           pageSize: { type: 'number', description: 'Optional page size.' },
+          organizationId: {
+            type: 'string',
+            description:
+              'GUID of the organization that owns the computer (organizationId from threatlocker_computers_list or an audit search row). Required for computers in child organizations; sent as the ManagedOrganizationId header.',
+          },
         },
         required: ['fullPath'],
         // `required` cannot express "hostname or computerId". anyOf requires
@@ -102,8 +123,9 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
 
   switch (toolName) {
     case 'threatlocker_audit_search': {
-      // Elicitation: if no searchText AND no date range, elicit date range
-      const hasSearchText = !!args.searchText;
+      // Elicitation: if no searchText, no hostname AND no date range, elicit date range
+      const hostname = nonEmptyString(args.hostname);
+      const hasSearchText = !!args.searchText || !!hostname;
       const hasDateRange = !!(args.startDate || args.endDate);
 
       let startDate = args.startDate as string | undefined;
@@ -130,7 +152,7 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
         // For 'Custom', leave dates undefined to prompt user to specify
       }
 
-      const params = {
+      const params: Record<string, unknown> = {
         searchText: args.searchText as string | undefined,
         startDate,
         endDate,
@@ -138,6 +160,9 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
         pageSize: args.pageSize as number | undefined,
         childOrganizations: args.childOrganizations as boolean | undefined,
       };
+      // Sent as the ActionLogGetByParametersV2 hostname field by the SDK.
+      // Only added when set, so existing callers see the same params.
+      if (hostname) params.hostname = hostname;
       logger.info('API call: auditLog.search', params);
       const result = await client.auditLog.search(params);
       const normalized = normalizeAuditSearchResult(result);
@@ -424,6 +449,10 @@ function fileHistoryParams(args: Record<string, unknown>): Record<string, unknow
   const params: Record<string, unknown> = { fullPath };
   if (hostname) params.hostname = hostname;
   if (computerId) params.computerId = computerId;
+  // Sent by the SDK as the ManagedOrganizationId header (not a query param).
+  // A blank value is dropped rather than sent.
+  const organizationId = nonEmptyString(args.organizationId);
+  if (organizationId) params.organizationId = organizationId;
   if (typeof args.sourceTableId === 'number') params.sourceTableId = args.sourceTableId;
   if (typeof args.pageNumber === 'number') params.pageNumber = args.pageNumber;
   if (typeof args.pageSize === 'number') params.pageSize = args.pageSize;
