@@ -4,6 +4,93 @@ import { getClient } from '../utils/client.js';
 import { logger } from '../utils/logger.js';
 import { elicitSelection } from '../utils/elicitation.js';
 
+/** actionType values ActionLogGetByParametersV2 matches exactly. */
+export const AUDIT_ACTION_TYPES = [
+  'execute',
+  'install',
+  'network',
+  'registry',
+  'read',
+  'write',
+  'move',
+  'delete',
+  'baseline',
+  'powershell',
+  'elevate',
+  'configuration',
+  'dns',
+] as const;
+
+const AUDIT_ACTION_IDS = [1, 2, 3, 6, 99];
+
+type ActionFilterResult = { ok: true; params: Record<string, unknown> } | { ok: false; message: string };
+
+/**
+ * actionId / actionType / onlyTrueDenies / simulateDeny / groupBys for
+ * threatlocker_audit_search. Keys are only added when the caller sets them.
+ */
+export function auditActionFilters(args: Record<string, unknown>): ActionFilterResult {
+  const params: Record<string, unknown> = {};
+
+  if (args.actionId != null) {
+    const actionId = Number(args.actionId);
+    if (!AUDIT_ACTION_IDS.includes(actionId)) {
+      return {
+        ok: false,
+        message:
+          'threatlocker_audit_search actionId must be 1 (Permit), 2 (Deny), 3 (Deny with option to request), ' +
+          '6 (Ringfenced) or 99 (Any Deny).',
+      };
+    }
+    params.actionId = actionId;
+  }
+
+  const actionType = nonEmptyString(args.actionType)?.toLowerCase();
+  if (actionType) {
+    if (!(AUDIT_ACTION_TYPES as readonly string[]).includes(actionType)) {
+      return {
+        ok: false,
+        message: `threatlocker_audit_search actionType must be one of: ${AUDIT_ACTION_TYPES.join(', ')}.`,
+      };
+    }
+    params.actionType = actionType;
+  }
+
+  const onlyTrueDenies = args.onlyTrueDenies === true;
+  const simulateDeny = args.simulateDeny === true;
+  if (onlyTrueDenies && simulateDeny) {
+    return { ok: false, message: 'threatlocker_audit_search: set onlyTrueDenies or simulateDeny, not both.' };
+  }
+  if ((onlyTrueDenies || simulateDeny) && params.actionId !== undefined && params.actionId !== 99) {
+    return {
+      ok: false,
+      message: 'threatlocker_audit_search: onlyTrueDenies and simulateDeny use actionId 99 (Any Deny); omit actionId or pass 99.',
+    };
+  }
+  if (onlyTrueDenies) params.onlyTrueDenies = true;
+  if (simulateDeny) params.simulateDeny = true;
+
+  if (args.groupBys != null) {
+    const g = args.groupBys;
+    if (
+      !Array.isArray(g) ||
+      g.length < 1 ||
+      g.length > 2 ||
+      !g.every((v) => Number.isInteger(v) && (v as number) > 0)
+    ) {
+      return {
+        ok: false,
+        message:
+          'threatlocker_audit_search groupBys must be one or two positive integer field ids, ' +
+          'for example [6] (Policy Name) or [6, 9] (Policy Name + Action Type).',
+      };
+    }
+    params.groupBys = g;
+  }
+
+  return { ok: true, params };
+}
+
 function getTools(): Tool[] {
   return [
     {
@@ -15,7 +102,9 @@ function getTools(): Tool[] {
         'need childOrganizations: true. Each row includes eActionLogId and organizationId when the ' +
         'upstream search returns them. sourceTableId (1-4) is included when present or under a known alias ' +
         '(SourceTableId, sourceTable, SourceTable). Pass those three fields to threatlocker_audit_get. ' +
-        'If a row has no sourceTableId, audit_get will probe tables 1-4.',
+        'If a row has no sourceTableId, audit_get will probe tables 1-4. ' +
+        'Filter by result with actionId (2 Deny, 99 Any Deny) and by actionType; use groupBys to count rows, ' +
+        'for example actionId 2 with groupBys [6, 9] counts denies by policy name and action type.',
       inputSchema: {
         type: 'object' as const,
         properties: {
@@ -36,6 +125,35 @@ function getTools(): Tool[] {
           childOrganizations: {
             type: 'boolean',
             description: 'Include child organizations. Needed to find rows from computers in child organizations.',
+          },
+          actionId: {
+            type: 'integer',
+            enum: [1, 2, 3, 6, 99],
+            description:
+              'Result filter: 1 Permit, 2 Deny, 3 Deny (Option to Request), 6 Ringfenced, 99 Any Deny. Omit for all results.',
+          },
+          actionType: {
+            type: 'string',
+            enum: [...AUDIT_ACTION_TYPES],
+            description: 'Action type filter (exact match). Omit for all action types.',
+          },
+          onlyTrueDenies: {
+            type: 'boolean',
+            description: 'Only enforced denies (not monitor-only). Uses actionId 99; do not combine with another actionId.',
+          },
+          simulateDeny: {
+            type: 'boolean',
+            description: 'Only simulated (monitor-only) denies. Uses actionId 99; do not combine with another actionId.',
+          },
+          groupBys: {
+            type: 'array',
+            items: { type: 'integer', minimum: 1 },
+            minItems: 1,
+            maxItems: 2,
+            description:
+              'Group and count rows by one or two fields; each row then carries groupByCount. ' +
+              'Field ids: 1 Username, 2 Process Path, 5 Policy Id, 6 Policy Name, 9 Action Type, 10 Full Path, 17 Asset Name. ' +
+              'Example deny breakdown by cause: actionId 2, groupBys [6, 9].',
           },
         },
       },
@@ -163,6 +281,11 @@ async function handleCall(toolName: string, args: Record<string, unknown>): Prom
       // Sent as the ActionLogGetByParametersV2 hostname field by the SDK.
       // Only added when set, so existing callers see the same params.
       if (hostname) params.hostname = hostname;
+      const filters = auditActionFilters(args);
+      if (!filters.ok) {
+        return { content: [{ type: 'text', text: filters.message }], isError: true };
+      }
+      Object.assign(params, filters.params);
       logger.info('API call: auditLog.search', params);
       const result = await client.auditLog.search(params);
       const normalized = normalizeAuditSearchResult(result);

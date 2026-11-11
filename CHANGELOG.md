@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Added
+
+- `threatlocker_audit_search` takes `actionId` (1 Permit, 2 Deny, 3 Deny with option to request,
+  6 Ringfenced, 99 Any Deny), `actionType`, `onlyTrueDenies`, `simulateDeny` and `groupBys`, so
+  denies can be filtered and counted by cause (for example `actionId: 2, groupBys: [6, 9]` for
+  policy name and action type). Needs the node-threatlocker release that adds these fields.
+
 ### Fixed
 
 - `threatlocker_audit_search`: `searchText` is now documented as what it is, a file path
