@@ -50,5 +50,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "ip-address": "^10.3.1"
   }
 }
