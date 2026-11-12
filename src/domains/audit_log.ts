@@ -96,9 +96,10 @@ function getTools(): Tool[] {
     {
       name: 'threatlocker_audit_search',
       description:
-        'Search audit log entries with optional filters. searchText is a FILE PATH filter (ThreatLocker fullPath), not ' +
-        'free text: pass the full path or use * wildcards (example: *\\setup.msi). A bare file name, ' +
-        'hostname or user name matches nothing. Use hostname to filter by computer. Computers in child organizations ' +
+        'Search audit log entries with optional filters. searchText is a PATH filter (ThreatLocker fullPath), not ' +
+        'free text: it matches the file path and also the process path and created-by path of each row, so a ' +
+        'program\'s path finds what that program did. Pass a full path or use * wildcards (example: *\\setup.msi). ' +
+        'A bare file name, hostname or user name matches nothing. Use hostname to filter by computer. Computers in child organizations ' +
         'need childOrganizations: true. Each row includes eActionLogId and organizationId when the ' +
         'upstream search returns them. sourceTableId (1-4) is included when present or under a known alias ' +
         '(SourceTableId, sourceTable, SourceTable). Pass those three fields to threatlocker_audit_get. ' +
@@ -111,8 +112,9 @@ function getTools(): Tool[] {
           searchText: {
             type: 'string',
             description:
-              'File path filter, sent as ThreatLocker fullPath. Matches the whole path: give the full path ' +
-              '(c:\\windows\\...\\setup.msi) or use * wildcards (*setup.msi, *\\vendor*). Not a hostname or user name.',
+              'Path filter, sent as ThreatLocker fullPath. Matches a whole path - the file path, or the process path or ' +
+              'created-by path of a row: give the full path (c:\\windows\\...\\setup.msi) or use * wildcards ' +
+              '(*setup.msi, *\\vendor*). Not a hostname or user name.',
           },
           hostname: {
             type: 'string',

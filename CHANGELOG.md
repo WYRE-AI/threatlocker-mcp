@@ -9,9 +9,9 @@
 
 ### Fixed
 
-- `threatlocker_audit_search`: `searchText` is now documented as what it is, a file path
-  filter sent as ThreatLocker `fullPath` that matches the whole path (full path or `*`
-  wildcards). Searching a hostname or a bare file name returned nothing with no hint why.
+- `threatlocker_audit_search`: `searchText` is now documented as what it is, a path filter
+  sent as ThreatLocker `fullPath` that matches a whole path (full path or `*` wildcards) -
+  the file path, and also the process path and created-by path of each row. Searching a hostname or a bare file name returned nothing with no hint why.
   New `hostname` parameter filters by computer (the SDK already sent `hostname`; the tool
   did not expose it). `pageSize` description corrected to the real default of 25.
 - `threatlocker_audit_file_history`: new optional `organizationId`, forwarded to
