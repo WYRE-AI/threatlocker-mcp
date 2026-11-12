@@ -1,7 +1,24 @@
 ## [Unreleased]
 
+### Added
+
+- `threatlocker_audit_search` takes `actionId` (1 Permit, 2 Deny, 3 Deny with option to request,
+  6 Ringfenced, 99 Any Deny), `actionType`, `onlyTrueDenies`, `simulateDeny` and `groupBys`, so
+  denies can be filtered and counted by cause (for example `actionId: 2, groupBys: [6, 9]` for
+  policy name and action type). Needs the node-threatlocker release that adds these fields.
+
 ### Fixed
 
+- `threatlocker_audit_search`: `searchText` is now documented as what it is, a path filter
+  sent as ThreatLocker `fullPath` that matches a whole path (full path or `*` wildcards) -
+  the file path, and also the process path and created-by path of each row. Searching a hostname or a bare file name returned nothing with no hint why.
+  New `hostname` parameter filters by computer (the SDK already sent `hostname`; the tool
+  did not expose it). `pageSize` description corrected to the real default of 25.
+- `threatlocker_audit_file_history`: new optional `organizationId`, forwarded to
+  `getFileHistory()` so the SDK can send it as `ManagedOrganizationId`. Without it a
+  computer in a child organization returned an empty history. Takes effect with a
+  node-threatlocker release that supports `getFileHistory({ organizationId })`; older SDKs
+  ignore the field.
 - `threatlocker_audit_search` now copies `sourceTableId` and `organizationId`
   onto each row when the upstream payload uses a known alias (`SourceTableId`,
   `sourceTable`, `SourceTable`, `eSourceTableId`, `OrganizationId`, `orgId`).
