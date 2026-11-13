@@ -9,6 +9,9 @@
 
 ### Fixed
 
+- `threatlocker_audit_search`: the `onlyTrueDenies` and `simulateDeny` descriptions now say they
+  cannot be combined with each other (the handler already rejects both together), and
+  `actionId` 99 Any Deny now says it also returns Ringfenced rows.
 - `threatlocker_audit_search`: `searchText` is now documented as what it is, a path filter
   sent as ThreatLocker `fullPath` that matches a whole path (full path or `*` wildcards) -
   the file path, and also the process path and created-by path of each row. Searching a hostname or a bare file name returned nothing with no hint why.

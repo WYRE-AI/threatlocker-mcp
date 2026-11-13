@@ -132,7 +132,7 @@ function getTools(): Tool[] {
             type: 'integer',
             enum: [1, 2, 3, 6, 99],
             description:
-              'Result filter: 1 Permit, 2 Deny, 3 Deny (Option to Request), 6 Ringfenced, 99 Any Deny. Omit for all results.',
+              'Result filter: 1 Permit, 2 Deny, 3 Deny (Option to Request), 6 Ringfenced, 99 Any Deny (also returns Ringfenced rows). Omit for all results.',
           },
           actionType: {
             type: 'string',
@@ -141,11 +141,11 @@ function getTools(): Tool[] {
           },
           onlyTrueDenies: {
             type: 'boolean',
-            description: 'Only enforced denies (not monitor-only). Uses actionId 99; do not combine with another actionId.',
+            description: 'Only enforced denies (not monitor-only). Uses actionId 99; do not combine with another actionId or with simulateDeny.',
           },
           simulateDeny: {
             type: 'boolean',
-            description: 'Only simulated (monitor-only) denies. Uses actionId 99; do not combine with another actionId.',
+            description: 'Only simulated (monitor-only) denies. Uses actionId 99; do not combine with another actionId or with onlyTrueDenies.',
           },
           groupBys: {
             type: 'array',
