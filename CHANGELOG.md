@@ -128,6 +128,10 @@
   caller), plus default/elicitation-fallback branches and the
   unknown-tool error path. No production code changed.
 
+### Security
+
+- Patched vulnerable dependencies reported by Trivy (lockfile updates, `ip-address` override) and upgraded Alpine packages in the image; the bundled npm CLI is removed from the runtime image.
+
 ## [1.2.5](https://github.com/wyre-technology/threatlocker-mcp/compare/v1.2.4...v1.2.5) (2026-07-22)
 
 
