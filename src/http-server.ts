@@ -49,7 +49,17 @@ export function startHttpServer(): Server {
   const isGatewayMode = process.env.AUTH_MODE === 'gateway';
 
   const httpServer = createHttpServer(async (req, res) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    // Only the path is used, so parse against a fixed base rather than the
+    // client-supplied Host header. A target that still cannot be parsed (e.g. "//")
+    // must answer 400, never throw out of the listener.
+    let url: URL;
+    try {
+      url = new URL(req.url || '/', 'http://localhost');
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Bad request' }));
+      return;
+    }
 
     // Shallow liveness probe — always 200 when the process is up.
     // Unauthenticated, and it must not read credentials: gateway mode has
