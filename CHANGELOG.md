@@ -15,6 +15,12 @@
   target is now parsed against a fixed base, so `Host` is no longer consulted, and a target
   that still cannot be parsed gets a `400` JSON response while the server keeps running.
 
+- **Rate-limit tool errors carry `retry_after_seconds`.** When a tool call fails with a
+  ThreatLocker rate limit (`RateLimitError`, HTTP 429), the error result now also has
+  `structuredContent: { error_type: "rate_limited", retry_after_seconds: N }`, with N taken from
+  the error's `retryAfter` (at least 1), so clients can wait the right time without parsing the
+  message. Other errors are unchanged.
+
 - `threatlocker_audit_search`: the `onlyTrueDenies` and `simulateDeny` descriptions now say they
   cannot be combined with each other (the handler already rejects both together), and
   `actionId` 99 Any Deny now says it also returns Ringfenced rows.

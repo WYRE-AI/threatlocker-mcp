@@ -4,6 +4,7 @@ import { getNavigationTools, DOMAINS } from './domains/navigation.js';
 import { getDomainHandler } from './domains/index.js';
 import { getCredentials } from './utils/client.js';
 import { logger } from './utils/logger.js';
+import { toolErrorResult } from './utils/tool-error.js';
 import { setServerRef } from './utils/server-ref.js';
 import type { DomainName } from './utils/types.js';
 
@@ -92,10 +93,8 @@ export function createMcpServer(): Server {
           return await handler.handleCall(name, (args || {}) as Record<string, unknown>, extra);
         } catch (error) {
           logger.error('Tool call failed', { tool: name, error: (error as Error).message });
-          return {
-            content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-            isError: true,
-          };
+          // A 429 also carries retry_after_seconds (see utils/tool-error.ts).
+          return toolErrorResult(error);
         }
       }
     }
