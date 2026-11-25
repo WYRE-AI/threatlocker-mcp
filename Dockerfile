@@ -46,6 +46,10 @@ COPY --from=builder /app/node_modules ./node_modules
 # Create logs directory
 RUN mkdir -p /app/logs && chown -R mcp:mcp /app
 
+# Security: patch OS packages and drop the npm CLI, which the runtime does not use
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 # Switch to non-root user
 USER mcp
 
